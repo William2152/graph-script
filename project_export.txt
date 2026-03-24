@@ -1,0 +1,6442 @@
+================================================================================
+PROJECT EXPORT
+Generated: 2026-03-24 11:49:00
+Root: graph-script
+Total files: 46
+================================================================================
+
+TABLE OF CONTENTS
+----------------------------------------
+  .gitignore
+  autorun.md
+  examples\binary-search.gs
+  examples\bloch-sphere.gs
+  examples\decision-tree-flow.gs
+  examples\graph-traversal-flow.gs
+  examples\hello-chart.gs
+  examples\quantum-circuit-flow.gs
+  examples\quantum-fidelity.gs
+  examples\quantum-fourier.gs
+  examples\qubit-stats.gs
+  export_project_to_txt.py
+  jest.config.js
+  output\Decision Tree Algorithm.svg
+  output\Measurement Counts.svg
+  output\Measurement Probabilities.svg
+  output\Quantum Circuit Flow.svg
+  output\Search Trace.svg
+  output\Squares.svg
+  package.json
+  program.md
+  SPEC.md
+  src\ast\types.ts
+  src\cli.ts
+  src\parser\expressions.ts
+  src\parser\index.ts
+  src\renderer\chart.ts
+  src\renderer\flow.ts
+  src\renderer\index.ts
+  src\runtime\builtins.ts
+  src\runtime\index.ts
+  src\runtime\scope.ts
+  src\runtime\values.ts
+  src\tokenizer\index.ts
+  src\tokenizer\types.ts
+  tests\parser\parser.test.d.ts
+  tests\parser\parser.test.d.ts.map
+  tests\parser\parser.test.js
+  tests\parser\parser.test.js.map
+  tests\parser\parser.test.ts
+  tests\runtime\runtime.test.d.ts
+  tests\runtime\runtime.test.d.ts.map
+  tests\runtime\runtime.test.js
+  tests\runtime\runtime.test.js.map
+  tests\runtime\runtime.test.ts
+  tsconfig.json
+
+================================================================================
+
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: .gitignore
+────────────────────────────────────────────────────────────────────────────────
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Generated output
+results.tsv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Coverage
+coverage/
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: autorun.md
+────────────────────────────────────────────────────────────────────────────────
+# graphscript-autodev
+
+This is an experiment to have the LLM autonomously implement and evolve the GraphScript language.
+
+## Setup
+
+To set up a new development session, work with the user to:
+
+1. **Agree on a run tag**: propose a tag based on today's date (e.g. `dev-mar5`). The branch `autodev/<tag>` must not already exist — this is a fresh development sprint.
+2. **Create the branch**: `git checkout -b autodev/<tag>` from current master.
+3. **Read the in-scope files**: The repo defines the language identity. Read these files for full context:
+   - `SPEC.md` — The language specification (syntax, semantics, blocks). This is the contract.
+   - `program.md` — The build plan, roadmap, and milestones (MVP -> ERD -> 3D). This is the guide.
+   - `packages/` — The implementation source (parser, runtime, IR, renderers).
+4. **Verify environment**: Check that `package.json` exists and dependencies are installed. If not, tell the human to run `npm install` or `pnpm install`.
+5. **Initialize results.tsv**: Create `results.tsv` with just the header row. The baseline build status will be recorded after the first run.
+6. **Confirm and go**: Confirm setup looks good.
+
+Once you get confirmation, kick off the autonomous development.
+
+## Development Loop
+
+Each experiment runs in a local development environment. The development script runs for a **fixed time budget per iteration** (e.g., 10 minutes for build + test + render). You launch it simply as: `npm run build && npm run test`.
+
+**What you CAN do:**
+- Modify `packages/` — this is the only code you edit. Everything is fair game: parser logic, IR structure, layout engine, renderer implementations, CLI commands.
+- Create new example files in `examples/` to test specific features.
+- Update `program.md` progress tracking (but do not change the core goals without justification).
+
+**What you CANNOT do:**
+- Modify `SPEC.md` arbitrarily. The syntax and semantics defined there are the ground truth. If you find a spec contradiction, note it in the log, but prioritize compliance unless the spec is clearly broken.
+- Install new packages or add dependencies without strong justification. Stick to the stack recommended in `program.md` (TypeScript monorepo).
+- Break backward compatibility without a version bump strategy.
+
+**The goal is simple: Maximize Feature Completion & Stability.** Since the roadmap is fixed (`program.md`), you don't need to worry about *what* to build next — follow the phases (MVP -> ERD -> Infra -> 3D). Everything is fair game: refactor the parser, optimize the layout engine, fix rendering bugs. The only constraint is that the code builds, tests pass, and examples render correctly.
+
+**Complexity criterion**: All else being equal, simpler is better. A small feature that adds ugly complexity is not worth it. Conversely, removing code and keeping tests passing is a great outcome. When evaluating whether to keep a change, weigh the complexity cost against the feature value. A feature that adds 100 lines of hacky code for a minor visual tweak? Probably not worth it. A refactor that deletes 50 lines and keeps functionality? Definitely keep.
+
+**The first run**: Your very first run should always be to establish the baseline, so you will run the build/test script as is.
+
+## Output format
+
+Once the script finishes it prints a summary like this:
+
+```
+---
+build_status:     SUCCESS
+test_pass_rate:   98.5%
+examples_rendered: 5/5
+total_seconds:    450.2
+errors:           0
+warnings:         3
+```
+
+Note that the script should fail fast if compilation errors occur. You can extract the key metric from the log file:
+
+```
+grep "^build_status:\|^test_pass_rate:" run.log
+```
+
+## Logging results
+
+When an experiment is done, log it to `results.tsv` (tab-separated, NOT comma-separated — commas break in descriptions).
+
+The TSV has a header row and 5 columns:
+
+```
+commit	build_status	test_pass_rate	status	description
+```
+
+1. git commit hash (short, 7 chars)
+2. build_status (SUCCESS/FAIL) — use FAIL for crashes
+3. test_pass_rate (e.g. 98.50) — use 0.00 for crashes
+4. status: `keep`, `discard`, or `crash`
+5. short text description of what this experiment tried (e.g., "implemented flow orthogonal routing")
+
+Example:
+
+```
+commit	build_status	test_pass_rate	status	description
+a1b2c3d	SUCCESS	95.00	keep	baseline MVP parser
+b2c3d4e	SUCCESS	96.50	keep	added chart line renderer
+c3d4e5f	FAIL	0.00	discard	broken IR transformation for flow
+d4e5f6g	SUCCESS	96.50	keep	refactored layout engine for speed
+```
+
+## The experiment loop
+
+The experiment runs on a dedicated branch (e.g. `autodev/mar5` or `autodev/mar5-gpu0`).
+
+LOOP FOREVER:
+
+1. Look at the git state: the current branch/commit we're on.
+2. Check `program.md` for the next milestone or pending feature.
+3. Tune the implementation (`packages/`) with an experimental idea by directly hacking the code to implement the feature.
+4. git commit.
+5. Run the experiment: `npm run build && npm run test > run.log 2>&1` (redirect everything — do NOT use tee or let output flood your context).
+6. Read out the results: `grep "^build_status:\|^test_pass_rate:" run.log`.
+7. If the grep output is empty or build_status is FAIL, the run crashed. Run `tail -n 50 run.log` to read the error log and attempt a fix. If you can't get things to work after more than a few attempts, give up on that specific approach.
+8. Record the results in the tsv (NOTE: do not commit the results.tsv file, leave it untracked by git).
+9. If build_status is SUCCESS and test_pass_rate improved or stayed stable while adding features, you "advance" the branch, keeping the git commit.
+10. If build_status is FAIL or test_pass_rate dropped significantly, you git reset back to where you started.
+
+The idea is that you are a completely autonomous developer trying things out. If they work, keep. If they don't, discard. And you're advancing the branch so that you can iterate. If you feel like you're getting stuck in some way, you can rewind but you should probably do this very very sparingly (if ever).
+
+**Timeout**: Each experiment should take ~10 minutes total (build + test + render examples). If a run exceeds 20 minutes, kill it and treat it as a failure (discard and revert).
+
+**Crashes**: If a run crashes (compile error, runtime exception), use your judgment: If it's something dumb and easy to fix (e.g. a typo, a missing import), fix it and re-run. If the idea itself is fundamentally broken (e.g. architectural mismatch with SPEC.md), just skip it, log "crash" as the status in the tsv, and move on.
+
+**NEVER STOP**: Once the experiment loop has begun (after the initial setup), do NOT pause to ask the human if you should continue. Do NOT ask "should I keep going?" or "is this a good stopping point?". The human might be asleep, or gone from a computer and expects you to continue working *indefinitely* until you are manually stopped. You are autonomous. If you run out of ideas, think harder — read `SPEC.md` for unimplemented blocks, re-read `program.md` for next milestones, try combining previous near-misses, try more radical architectural refactors. The loop runs until the human interrupts you, period.
+
+**Roadmap Progression**:
+- Start with **MVP** (Parser, Data, Func, Algo, Chart, Flow, Table, SVG).
+- Once MVP is stable (tests passing, examples rendering), move to **ERD & Infra**.
+- Once ERD/Infra is stable, move to **3D (plot3d, scene3d)**.
+- Finally, work on **Tooling Polish** (LSP, Formatter).
+
+As an example use case, a user might leave you running while they sleep. If each experiment takes you ~10 minutes then you can run approx 6/hour, for a total of about 50 over the duration of the average human sleep. The user then wakes up to a more complete implementation of GraphScript, all completed by you while they slept!
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: examples\binary-search.gs
+────────────────────────────────────────────────────────────────────────────────
+use chart
+
+algo BinarySearch(arr, target):
+  low = 0
+  high = len(arr) - 1
+
+  while low <= high:
+    mid = floor((low + high) / 2)
+
+    emit:
+      step = low + high
+      low = low
+      high = high
+      mid = mid
+
+    if arr[mid] == target:
+      return mid
+    else if arr[mid] < target:
+      low = mid + 1
+    else:
+      high = mid - 1
+
+  return -1
+
+data:
+  sorted = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19]
+  result = BinarySearch(sorted, 11)
+
+chart "Search Trace":
+  type = line
+  x = step
+  y = mid
+  xlabel = "iteration"
+  ylabel = "mid value"
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: examples\bloch-sphere.gs
+────────────────────────────────────────────────────────────────────────────────
+use chart
+
+algo BlochSphere(theta, phi):
+  x = sin(theta) * cos(phi)
+  y = sin(theta) * sin(phi)
+  z = cos(theta)
+
+  emit:
+    theta = theta
+    phi = phi
+    x = x
+    y = y
+    z = z
+
+data:
+  theta_val = 1.047
+  phi_val = 0.785
+  result = BlochSphere(theta_val, phi_val)
+
+chart "Bloch Sphere State":
+  type = scatter
+  x = x
+  y = z
+  xlabel = "x"
+  ylabel = "z"
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: examples\decision-tree-flow.gs
+────────────────────────────────────────────────────────────────────────────────
+flow "Decision Tree Algorithm":
+  node start type=start label="Start"
+  node check1 label="Is feature > threshold?"
+  node left1 label="Class A"
+  node right1 label="Is feature2 > threshold2?"
+  node left2 label="Class B"
+  node right2 label="Class C"
+  node end type=end label="End"
+
+  start -> check1
+  check1 -> left1 label="Yes"
+  check1 -> right1 label="No"
+  right1 -> left2 label="Yes"
+  right1 -> right2 label="No"
+  left1 -> end
+  left2 -> end
+  right2 -> end
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: examples\graph-traversal-flow.gs
+────────────────────────────────────────────────────────────────────────────────
+flow "Graph Traversal":
+  node start type=start label="Start"
+  node queue label="Add to Queue"
+  node check label="Queue Empty?"
+  node process label="Process Node"
+  node neighbors label="Add Neighbors"
+  node end type=end label="End"
+
+  start -> queue
+  queue -> check
+  check -> process label="No"
+  check -> end label="Yes"
+  process -> neighbors
+  neighbors -> check
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: examples\hello-chart.gs
+────────────────────────────────────────────────────────────────────────────────
+use chart
+
+data:
+  xs = range(0, 10, 1)
+  ys = [1, 4, 9, 16, 25, 36, 49, 64, 81, 100]
+
+chart "Squares":
+  type = line
+  x = xs
+  y = ys
+  xlabel = "x"
+  ylabel = "x^2"
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: examples\quantum-circuit-flow.gs
+────────────────────────────────────────────────────────────────────────────────
+flow "Quantum Circuit Flow":
+  node start type=start label="Input State"
+  node init label="Initialize"
+  node gate1 label="H Gate"
+  node gate2 label="CNOT Gate"
+  node measure label="Measure"
+  node output label="Output"
+  node end type=end label="End"
+
+  start -> init
+  init -> gate1
+  gate1 -> gate2
+  gate2 -> measure
+  measure -> output
+  output -> end
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: examples\quantum-fidelity.gs
+────────────────────────────────────────────────────────────────────────────────
+use chart
+
+data:
+  iteration = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  fidelity_ideal = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+  fidelity_noisy = [0.98, 0.96, 0.94, 0.92, 0.90, 0.88, 0.86, 0.84, 0.82, 0.80]
+
+chart "Quantum Gate Fidelity":
+  type = line
+  x = iteration
+  y = fidelity_noisy
+  xlabel = "Gate Iteration"
+  ylabel = "Fidelity"
+  title = "Gate Fidelity Decay"
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: examples\quantum-fourier.gs
+────────────────────────────────────────────────────────────────────────────────
+use chart
+
+algo QuantumFourier(n):
+  i = 0
+  while i < n:
+    emit:
+      step = i
+      angle = 2 * 3.14159 / pow(2, i + 1)
+      phase = "e^(i*" + str(angle) + ")"
+    i = i + 1
+  return n
+
+data:
+  result = QuantumFourier(5)
+
+chart "QFT Phase Angles":
+  type = line
+  source = result
+  x = step
+  y = angle
+  xlabel = "Step"
+  ylabel = "Phase Angle"
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: examples\qubit-stats.gs
+────────────────────────────────────────────────────────────────────────────────
+use chart
+
+data:
+  labels = ["Q1", "Q2", "Q3", "Q4", "Q5"]
+  probabilities = [0.3, 0.15, 0.25, 0.2, 0.1]
+  measurements = [3, 1, 2, 2, 1]
+
+chart "Measurement Probabilities":
+  type = pie
+  source = probabilities
+
+chart "Measurement Counts":
+  type = bar
+  source = measurements
+  xlabel = "Qubit"
+  ylabel = "Count"
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: export_project_to_txt.py
+────────────────────────────────────────────────────────────────────────────────
+#!/usr/bin/env python3
+"""
+Export Project to TXT
+
+This script reads the entire project, respects .gitignore patterns,
+and exports all file contents to a single .txt file for context collection.
+
+Usage:
+    python export_project_to_txt.py [output_filename]
+
+If no output filename is provided, defaults to 'project_export.txt'
+"""
+
+import os
+import sys
+import fnmatch
+from pathlib import Path
+from datetime import datetime
+
+
+WINDOWS_RESERVED_NAMES = {
+    'CON', 'PRN', 'AUX', 'NUL',
+    *(f'COM{i}' for i in range(1, 10)),
+    *(f'LPT{i}' for i in range(1, 10)),
+}
+
+
+def is_windows_reserved_path(path: str) -> bool:
+    """
+    Check whether a path resolves to a reserved Windows device name.
+    """
+    if os.name != 'nt':
+        return False
+
+    name = os.path.basename(os.path.normpath(path))
+    stem = name.split('.')[0].rstrip(' .').upper()
+    return stem in WINDOWS_RESERVED_NAMES
+
+
+def parse_gitignore(gitignore_path: str) -> list[str]:
+    """
+    Parse .gitignore file and return a list of patterns.
+    Handles comments, blank lines, and negation patterns.
+    """
+    patterns = []
+    
+    if not os.path.exists(gitignore_path):
+        print(f"Warning: {gitignore_path} not found. No patterns will be ignored.")
+        return patterns
+    
+    with open(gitignore_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            # Skip empty lines and comments
+            if not line or line.startswith('#'):
+                continue
+            # Add the pattern
+            patterns.append(line)
+    
+    return patterns
+
+
+def should_ignore(path: str, patterns: list[str], root_dir: str) -> bool:
+    """
+    Check if a path should be ignored based on gitignore patterns.
+    
+    Args:
+        path: The file or directory path to check
+        patterns: List of gitignore patterns
+        root_dir: The root directory of the project
+    
+    Returns:
+        True if the path should be ignored, False otherwise
+    """
+    if is_windows_reserved_path(path):
+        return True
+
+    # Get relative path from root
+    try:
+        rel_path = os.path.relpath(path, root_dir)
+    except ValueError:
+        # Skip weird Windows device/mount paths like \\.\nul
+        return True
+
+    # Normalize path separators
+    rel_path_normalized = rel_path.replace('\\', '/')
+    
+    # Get the basename
+    basename = os.path.basename(os.path.normpath(path))
+    
+    # Check if it's a directory
+    is_dir = os.path.isdir(path)
+    
+    for pattern in patterns:
+        
+        # Handle negation (we'll skip negation for simplicity in this implementation)
+        if pattern.startswith('!'):
+            continue
+        
+        # Remove leading slash (it means relative to root)
+        if pattern.startswith('/'):
+            pattern = pattern[1:]
+            # Pattern must match from root
+            if fnmatch.fnmatch(rel_path_normalized, pattern):
+                return True
+            if fnmatch.fnmatch(rel_path_normalized, pattern.rstrip('/') + '/**'):
+                return True
+            continue
+        
+        # Handle directory-specific patterns (ending with /)
+        if pattern.endswith('/'):
+            pattern = pattern.rstrip('/')
+            if is_dir:
+                if fnmatch.fnmatch(basename, pattern):
+                    return True
+                if fnmatch.fnmatch(rel_path_normalized, pattern):
+                    return True
+                if fnmatch.fnmatch(rel_path_normalized, '**/' + pattern):
+                    return True
+        
+        # Handle ** patterns (match any directory depth)
+        if '**' in pattern:
+            if fnmatch.fnmatch(rel_path_normalized, pattern):
+                return True
+            # Check each component
+            parts = rel_path_normalized.split('/')
+            for i in range(len(parts)):
+                partial = '/'.join(parts[i:])
+                if fnmatch.fnmatch(partial, pattern.lstrip('*/')):
+                    return True
+        
+        # Standard pattern matching
+        # Match against basename
+        if fnmatch.fnmatch(basename, pattern):
+            return True
+        
+        # Match against relative path
+        if fnmatch.fnmatch(rel_path_normalized, pattern):
+            return True
+        
+        # Match pattern anywhere in path
+        if fnmatch.fnmatch(rel_path_normalized, '**/' + pattern):
+            return True
+        
+        # Check if any parent directory matches
+        parts = rel_path_normalized.split('/')
+        for i in range(len(parts)):
+            partial = '/'.join(parts[:i+1])
+            if fnmatch.fnmatch(parts[i], pattern.rstrip('/')):
+                return True
+    
+    return False
+
+
+def is_binary_file(filepath: str) -> bool:
+    """
+    Check if a file is binary by reading the first few bytes.
+    """
+    try:
+        with open(filepath, 'rb') as f:
+            chunk = f.read(8192)
+            # Check for null bytes which indicate binary
+            if b'\x00' in chunk:
+                return True
+            # Try to decode as utf-8
+            try:
+                chunk.decode('utf-8')
+                return False
+            except UnicodeDecodeError:
+                return True
+    except Exception:
+        return True
+
+
+def get_file_content(filepath: str) -> str | None:
+    """
+    Get the content of a file if it's a text file.
+    Returns None for binary files.
+    """
+    if is_binary_file(filepath):
+        return None
+    
+    try:
+        with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
+            return f.read()
+    except Exception as e:
+        return f"[Error reading file: {e}]"
+
+
+def export_project(root_dir: str, output_file: str):
+    """
+    Export the entire project to a single text file.
+    
+    Args:
+        root_dir: The root directory of the project
+        output_file: The output file path
+    """
+    # Parse .gitignore
+    gitignore_path = os.path.join(root_dir, '.gitignore')
+    patterns = parse_gitignore(gitignore_path)
+    
+    # Add default patterns to always ignore
+    default_ignore = [
+        '.git',
+        '.git/**',
+        '__pycache__',
+        '__pycache__/**',
+        '*.pyc',
+        '.env',
+        '.env.*',
+        'node_modules',
+        'node_modules/**',
+        '*.lock',
+        'package-lock.json',
+        'pubspec.lock',
+        os.path.basename(output_file),
+    ]
+    patterns.extend(default_ignore)
+    
+    # Collect all files
+    files_to_export = []
+    
+    for dirpath, dirnames, filenames in os.walk(root_dir):
+        # Filter out ignored directories (modify in place)
+        dirnames[:] = [d for d in dirnames if not should_ignore(
+            os.path.join(dirpath, d), patterns, root_dir
+        )]
+        
+        for filename in filenames:
+            filepath = os.path.join(dirpath, filename)
+            
+            if not should_ignore(filepath, patterns, root_dir):
+                rel_path = os.path.relpath(filepath, root_dir)
+                files_to_export.append((rel_path, filepath))
+    
+    # Sort files by path for consistent output
+    files_to_export.sort(key=lambda x: x[0].lower())
+    
+    # Write to output file
+    with open(output_file, 'w', encoding='utf-8') as out:
+        # Write header
+        out.write("=" * 80 + "\n")
+        out.write(f"PROJECT EXPORT\n")
+        out.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        out.write(f"Root: {os.path.basename(root_dir)}\n")
+        out.write(f"Total files: {len(files_to_export)}\n")
+        out.write("=" * 80 + "\n\n")
+        
+        # Write table of contents
+        out.write("TABLE OF CONTENTS\n")
+        out.write("-" * 40 + "\n")
+        for rel_path, _ in files_to_export:
+            out.write(f"  {rel_path}\n")
+        out.write("\n" + "=" * 80 + "\n\n")
+        
+        # Write file contents
+        for rel_path, filepath in files_to_export:
+            out.write("\n")
+            out.write("─" * 80 + "\n")
+            out.write(f"FILE: {rel_path}\n")
+            out.write("─" * 80 + "\n")
+            
+            content = get_file_content(filepath)
+            if content is None:
+                out.write("[Binary file - content not included]\n")
+            else:
+                out.write(content)
+                # Ensure file ends with newline
+                if not content.endswith('\n'):
+                    out.write('\n')
+        
+        out.write("\n" + "=" * 80 + "\n")
+        out.write("END OF EXPORT\n")
+        out.write("=" * 80 + "\n")
+    
+    return len(files_to_export)
+
+
+def main():
+    # Determine output filename
+    if len(sys.argv) > 1:
+        output_filename = sys.argv[1]
+    else:
+        output_filename = 'project_export.txt'
+    
+    # Get the directory where the script is run from
+    root_dir = os.getcwd()
+    output_path = os.path.join(root_dir, output_filename)
+    
+    print(f"Exporting project from: {root_dir}")
+    print(f"Output file: {output_filename}")
+    print("Reading .gitignore patterns...")
+    
+    file_count = export_project(root_dir, output_path)
+    
+    # Get output file size
+    file_size = os.path.getsize(output_path)
+    size_str = f"{file_size:,} bytes"
+    if file_size > 1024 * 1024:
+        size_str = f"{file_size / (1024 * 1024):.2f} MB"
+    elif file_size > 1024:
+        size_str = f"{file_size / 1024:.2f} KB"
+    
+    print(f"\n✓ Export complete!")
+    print(f"  Files exported: {file_count}")
+    print(f"  Output size: {size_str}")
+    print(f"  Saved to: {output_filename}")
+
+
+if __name__ == '__main__':
+    main()
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: jest.config.js
+────────────────────────────────────────────────────────────────────────────────
+module.exports = {
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  roots: ['<rootDir>/tests'],
+  testMatch: ['**/?(*.)+(spec|test).ts'],
+  moduleFileExtensions: ['ts', 'js', 'json'],
+  maxWorkers: 1,
+  transform: {
+    '^.+\\.ts$': ['ts-jest', { isolatedModules: true, useESM: false }],
+  },
+};
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: output\Decision Tree Algorithm.svg
+────────────────────────────────────────────────────────────────────────────────
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="605" viewBox="0 0 400 605"><rect width="400" height="605" fill="white"/><text x="200" y="30" text-anchor="middle" font-size="18" font-weight="bold" fill="#333">Decision Tree Algorithm</text><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#666"/></marker></defs><g transform="translate(200, 60)"><polyline points="60,50 60,80 60,80 60,110" fill="none" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/><polyline points="60,160 60,190 -40,190 -40,220" fill="none" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/><text x="-40" y="182" text-anchor="middle" font-size="11" fill="#666">Yes</text><polyline points="60,160 60,190 160,190 160,220" fill="none" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/><text x="160" y="182" text-anchor="middle" font-size="11" fill="#666">No</text><polyline points="160,270 160,300 -40,300 -40,330" fill="none" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/><text x="-40" y="292" text-anchor="middle" font-size="11" fill="#666">Yes</text><polyline points="160,270 160,300 160,300 160,330" fill="none" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/><text x="160" y="292" text-anchor="middle" font-size="11" fill="#666">No</text><polyline points="-40,270 -40,355 60,355 60,440" fill="none" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/><polyline points="-40,380 -40,410 60,410 60,440" fill="none" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/><polyline points="160,380 160,410 60,410 60,440" fill="none" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/><g transform="translate(-60, -25)"><rect width="120" height="50" rx="6" fill="#27ae60" stroke="#2c3e50" stroke-width="2"/><text x="60" y="30" text-anchor="middle" font-size="12" fill="white" font-weight="500">Start</text></g><g transform="translate(-60, 85)"><rect width="120" height="50" rx="6" fill="#3498db" stroke="#2c3e50" stroke-width="2"/><text x="60" y="30" text-anchor="middle" font-size="12" fill="white" font-weight="500">Is feature &gt; threshold?</text></g><g transform="translate(-160, 195)"><rect width="120" height="50" rx="6" fill="#3498db" stroke="#2c3e50" stroke-width="2"/><text x="60" y="30" text-anchor="middle" font-size="12" fill="white" font-weight="500">Class A</text></g><g transform="translate(40, 195)"><rect width="120" height="50" rx="6" fill="#3498db" stroke="#2c3e50" stroke-width="2"/><text x="60" y="30" text-anchor="middle" font-size="12" fill="white" font-weight="500">Is feature2 &gt; threshold2?</text></g><g transform="translate(-160, 305)"><rect width="120" height="50" rx="6" fill="#3498db" stroke="#2c3e50" stroke-width="2"/><text x="60" y="30" text-anchor="middle" font-size="12" fill="white" font-weight="500">Class B</text></g><g transform="translate(40, 305)"><rect width="120" height="50" rx="6" fill="#3498db" stroke="#2c3e50" stroke-width="2"/><text x="60" y="30" text-anchor="middle" font-size="12" fill="white" font-weight="500">Class C</text></g><g transform="translate(-60, 415)"><rect width="120" height="50" rx="6" fill="#e74c3c" stroke="#2c3e50" stroke-width="2"/><text x="60" y="30" text-anchor="middle" font-size="12" fill="white" font-weight="500">End</text></g></g></svg>
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: output\Measurement Counts.svg
+────────────────────────────────────────────────────────────────────────────────
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="400" viewBox="0 0 800 400"><rect width="800" height="400" fill="white"/><text x="400" y="25" text-anchor="middle" font-size="18" font-weight="bold">Measurement Counts</text><g transform="translate(60, 40)"><line x1="0" y1="310" x2="720" y2="310" stroke="#e0e0e0" stroke-dasharray="2"/><text x="-10" y="314" text-anchor="end" font-size="11" fill="#666">0.0</text><line x1="0" y1="232.5" x2="720" y2="232.5" stroke="#e0e0e0" stroke-dasharray="2"/><text x="-10" y="236.5" text-anchor="end" font-size="11" fill="#666">0.8</text><line x1="0" y1="155" x2="720" y2="155" stroke="#e0e0e0" stroke-dasharray="2"/><text x="-10" y="159" text-anchor="end" font-size="11" fill="#666">1.5</text><line x1="0" y1="77.5" x2="720" y2="77.5" stroke="#e0e0e0" stroke-dasharray="2"/><text x="-10" y="81.5" text-anchor="end" font-size="11" fill="#666">2.3</text><line x1="0" y1="0" x2="720" y2="0" stroke="#e0e0e0" stroke-dasharray="2"/><text x="-10" y="4" text-anchor="end" font-size="11" fill="#666">3.0</text><rect x="0" y="279" width="66" height="30.999999999999996" fill="#3498db" rx="2"><title>probabilities: 0.3</title></rect><rect x="144" y="294.5" width="66" height="15.499999999999998" fill="#3498db" rx="2"><title>probabilities: 0.15</title></rect><rect x="288" y="284.1666666666667" width="66" height="25.833333333333332" fill="#3498db" rx="2"><title>probabilities: 0.25</title></rect><rect x="432" y="289.3333333333333" width="66" height="20.666666666666668" fill="#3498db" rx="2"><title>probabilities: 0.2</title></rect><rect x="576" y="299.6666666666667" width="66" height="10.333333333333334" fill="#3498db" rx="2"><title>probabilities: 0.1</title></rect><rect x="66" y="0" width="66" height="310" fill="#e74c3c" rx="2"><title>measurements: 3</title></rect><rect x="210" y="206.66666666666669" width="66" height="103.33333333333333" fill="#e74c3c" rx="2"><title>measurements: 1</title></rect><rect x="354" y="103.33333333333334" width="66" height="206.66666666666666" fill="#e74c3c" rx="2"><title>measurements: 2</title></rect><rect x="498" y="103.33333333333334" width="66" height="206.66666666666666" fill="#e74c3c" rx="2"><title>measurements: 2</title></rect><rect x="642" y="206.66666666666669" width="66" height="103.33333333333333" fill="#e74c3c" rx="2"><title>measurements: 1</title></rect><line x1="0" y1="310" x2="720" y2="310" stroke="#333"/><line x1="0" y1="0" x2="0" y2="310" stroke="#333"/><text x="360" y="345" text-anchor="middle" font-size="12" fill="#333">Qubit</text><text x="-155" y="-40" text-anchor="middle" font-size="12" fill="#333" transform="rotate(-90)">Count</text></g></svg>
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: output\Measurement Probabilities.svg
+────────────────────────────────────────────────────────────────────────────────
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="400" viewBox="0 0 800 400"><rect width="800" height="400" fill="white"/><text x="400" y="25" text-anchor="middle" font-size="18" font-weight="bold">Measurement Probabilities</text><path d="M 400 200 L 400 60 A 140 140 0 0 1 426.23338404200143 62.47978489798359 Z" fill="#3498db" stroke="white" stroke-width="2"><title>probabilities: 0.3</title></path><path d="M 400 200 L 426.23338404200143 62.47978489798359 A 140 140 0 0 1 439.0587548454921 65.55888400522798 Z" fill="#e74c3c" stroke="white" stroke-width="2"><title>probabilities: 0.15</title></path><path d="M 400 200 L 439.0587548454921 65.55888400522798 A 140 140 0 0 1 459.6091008191102 73.32421265475728 Z" fill="#2ecc71" stroke="white" stroke-width="2"><title>probabilities: 0.25</title></path><path d="M 400 200 L 459.6091008191102 73.32421265475728 A 140 140 0 0 1 475.0157512970595 81.79409042971791 Z" fill="#f39c12" stroke="white" stroke-width="2"><title>probabilities: 0.2</title></path><path d="M 400 200 L 475.0157512970595 81.79409042971791 A 140 140 0 0 1 482.28993532094626 86.73762078750738 Z" fill="#9b59b6" stroke="white" stroke-width="2"><title>probabilities: 0.1</title></path><path d="M 400 200 L 482.28993532094626 86.73762078750738 A 140 140 0 0 1 482.28993532094626 313.26237921249265 Z" fill="#1abc9c" stroke="white" stroke-width="2"><title>measurements: 3</title></path><text x="484" y="200" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="white" font-weight="bold">30%</text><path d="M 400 200 L 482.28993532094626 313.26237921249265 A 140 140 0 0 1 400 340 Z" fill="#e67e22" stroke="white" stroke-width="2"><title>measurements: 1</title></path><text x="425.9574275274956" y="279.8887473687929" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="white" font-weight="bold">10%</text><path d="M 400 200 L 400 340 A 140 140 0 0 1 266.8520877186785 243.26237921249265 Z" fill="#34495e" stroke="white" stroke-width="2"><title>measurements: 2</title></path><text x="350.6260388074323" y="267.9574275274956" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="white" font-weight="bold">20%</text><path d="M 400 200 L 266.8520877186785 243.26237921249265 A 140 140 0 0 1 317.71006467905374 86.73762078750737 Z" fill="#3498db" stroke="white" stroke-width="2"><title>measurements: 2</title></path><text x="320.1112526312071" y="174.0425724725044" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="white" font-weight="bold">20%</text><path d="M 400 200 L 317.71006467905374 86.73762078750737 A 140 140 0 0 1 400 60 Z" fill="#e74c3c" stroke="white" stroke-width="2"><title>measurements: 1</title></path><text x="374.0425724725044" y="120.11125263120711" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="white" font-weight="bold">10%</text></svg>
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: output\Quantum Circuit Flow.svg
+────────────────────────────────────────────────────────────────────────────────
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="825" viewBox="0 0 400 825"><rect width="400" height="825" fill="white"/><text x="200" y="30" text-anchor="middle" font-size="18" font-weight="bold" fill="#333">Quantum Circuit Flow</text><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#666"/></marker></defs><g transform="translate(200, 60)"><polyline points="60,50 60,80 60,80 60,110" fill="none" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/><polyline points="60,160 60,190 60,190 60,220" fill="none" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/><polyline points="60,270 60,300 60,300 60,330" fill="none" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/><polyline points="60,380 60,410 60,410 60,440" fill="none" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/><polyline points="60,490 60,520 60,520 60,550" fill="none" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/><polyline points="60,600 60,630 60,630 60,660" fill="none" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/><g transform="translate(-60, -25)"><rect width="120" height="50" rx="6" fill="#27ae60" stroke="#2c3e50" stroke-width="2"/><text x="60" y="30" text-anchor="middle" font-size="12" fill="white" font-weight="500">Input State</text></g><g transform="translate(-60, 85)"><rect width="120" height="50" rx="6" fill="#3498db" stroke="#2c3e50" stroke-width="2"/><text x="60" y="30" text-anchor="middle" font-size="12" fill="white" font-weight="500">Initialize</text></g><g transform="translate(-60, 195)"><rect width="120" height="50" rx="6" fill="#3498db" stroke="#2c3e50" stroke-width="2"/><text x="60" y="30" text-anchor="middle" font-size="12" fill="white" font-weight="500">H Gate</text></g><g transform="translate(-60, 305)"><rect width="120" height="50" rx="6" fill="#3498db" stroke="#2c3e50" stroke-width="2"/><text x="60" y="30" text-anchor="middle" font-size="12" fill="white" font-weight="500">CNOT Gate</text></g><g transform="translate(-60, 415)"><rect width="120" height="50" rx="6" fill="#3498db" stroke="#2c3e50" stroke-width="2"/><text x="60" y="30" text-anchor="middle" font-size="12" fill="white" font-weight="500">Measure</text></g><g transform="translate(-60, 525)"><rect width="120" height="50" rx="6" fill="#3498db" stroke="#2c3e50" stroke-width="2"/><text x="60" y="30" text-anchor="middle" font-size="12" fill="white" font-weight="500">Output</text></g><g transform="translate(-60, 635)"><rect width="120" height="50" rx="6" fill="#e74c3c" stroke="#2c3e50" stroke-width="2"/><text x="60" y="30" text-anchor="middle" font-size="12" fill="white" font-weight="500">End</text></g></g></svg>
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: output\Search Trace.svg
+────────────────────────────────────────────────────────────────────────────────
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="400" viewBox="0 0 800 400"><rect width="800" height="400" fill="white"/><text x="400" y="25" text-anchor="middle" font-size="18" font-weight="bold">Search Trace</text><g transform="translate(60, 40)"><line x1="0" y1="310" x2="720" y2="310" stroke="#e0e0e0" stroke-dasharray="2"/><text x="-10" y="314" text-anchor="end" font-size="11" fill="#666">0.0</text><line x1="0" y1="232.5" x2="720" y2="232.5" stroke="#e0e0e0" stroke-dasharray="2"/><text x="-10" y="236.5" text-anchor="end" font-size="11" fill="#666">4.8</text><line x1="0" y1="155" x2="720" y2="155" stroke="#e0e0e0" stroke-dasharray="2"/><text x="-10" y="159" text-anchor="end" font-size="11" fill="#666">9.5</text><line x1="0" y1="77.5" x2="720" y2="77.5" stroke="#e0e0e0" stroke-dasharray="2"/><text x="-10" y="81.5" text-anchor="end" font-size="11" fill="#666">14.3</text><line x1="0" y1="0" x2="720" y2="0" stroke="#e0e0e0" stroke-dasharray="2"/><text x="-10" y="4" text-anchor="end" font-size="11" fill="#666">19.0</text><polyline points="0,293.6842105263158 80,261.0526315789474 160,228.42105263157896 240,195.78947368421052 320,163.1578947368421 400,130.52631578947367 480,97.89473684210526 560,65.26315789473685 640,32.63157894736844 720,0" fill="none" stroke="#3498db" stroke-width="2" stroke-linejoin="round"/><circle cx="0" cy="293.6842105263158" r="4" fill="#3498db"><title>sorted: 1</title></circle><circle cx="80" cy="261.0526315789474" r="4" fill="#3498db"><title>sorted: 3</title></circle><circle cx="160" cy="228.42105263157896" r="4" fill="#3498db"><title>sorted: 5</title></circle><circle cx="240" cy="195.78947368421052" r="4" fill="#3498db"><title>sorted: 7</title></circle><circle cx="320" cy="163.1578947368421" r="4" fill="#3498db"><title>sorted: 9</title></circle><circle cx="400" cy="130.52631578947367" r="4" fill="#3498db"><title>sorted: 11</title></circle><circle cx="480" cy="97.89473684210526" r="4" fill="#3498db"><title>sorted: 13</title></circle><circle cx="560" cy="65.26315789473685" r="4" fill="#3498db"><title>sorted: 15</title></circle><circle cx="640" cy="32.63157894736844" r="4" fill="#3498db"><title>sorted: 17</title></circle><circle cx="720" cy="0" r="4" fill="#3498db"><title>sorted: 19</title></circle><line x1="0" y1="310" x2="720" y2="310" stroke="#333"/><line x1="0" y1="0" x2="0" y2="310" stroke="#333"/><text x="360" y="345" text-anchor="middle" font-size="12" fill="#333">iteration</text><text x="-155" y="-40" text-anchor="middle" font-size="12" fill="#333" transform="rotate(-90)">mid value</text></g></svg>
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: output\Squares.svg
+────────────────────────────────────────────────────────────────────────────────
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="400" viewBox="0 0 800 400"><rect width="800" height="400" fill="white"/><text x="400" y="25" text-anchor="middle" font-size="18" font-weight="bold">Squares</text><g transform="translate(60, 40)"><line x1="0" y1="310" x2="720" y2="310" stroke="#e0e0e0" stroke-dasharray="2"/><text x="-10" y="314" text-anchor="end" font-size="11" fill="#666">0.0</text><line x1="0" y1="232.5" x2="720" y2="232.5" stroke="#e0e0e0" stroke-dasharray="2"/><text x="-10" y="236.5" text-anchor="end" font-size="11" fill="#666">25.0</text><line x1="0" y1="155" x2="720" y2="155" stroke="#e0e0e0" stroke-dasharray="2"/><text x="-10" y="159" text-anchor="end" font-size="11" fill="#666">50.0</text><line x1="0" y1="77.5" x2="720" y2="77.5" stroke="#e0e0e0" stroke-dasharray="2"/><text x="-10" y="81.5" text-anchor="end" font-size="11" fill="#666">75.0</text><line x1="0" y1="0" x2="720" y2="0" stroke="#e0e0e0" stroke-dasharray="2"/><text x="-10" y="4" text-anchor="end" font-size="11" fill="#666">100.0</text><polyline points="0,310 80,306.9 160,303.8 240,300.7 320,297.6 400,294.5 480,291.4 560,288.3 640,285.2 720,282.1" fill="none" stroke="#3498db" stroke-width="2" stroke-linejoin="round"/><circle cx="0" cy="310" r="4" fill="#3498db"><title>xs: 0</title></circle><circle cx="80" cy="306.9" r="4" fill="#3498db"><title>xs: 1</title></circle><circle cx="160" cy="303.8" r="4" fill="#3498db"><title>xs: 2</title></circle><circle cx="240" cy="300.7" r="4" fill="#3498db"><title>xs: 3</title></circle><circle cx="320" cy="297.6" r="4" fill="#3498db"><title>xs: 4</title></circle><circle cx="400" cy="294.5" r="4" fill="#3498db"><title>xs: 5</title></circle><circle cx="480" cy="291.4" r="4" fill="#3498db"><title>xs: 6</title></circle><circle cx="560" cy="288.3" r="4" fill="#3498db"><title>xs: 7</title></circle><circle cx="640" cy="285.2" r="4" fill="#3498db"><title>xs: 8</title></circle><circle cx="720" cy="282.1" r="4" fill="#3498db"><title>xs: 9</title></circle><polyline points="0,306.9 80,297.6 160,282.1 240,260.4 320,232.5 400,198.4 480,158.1 560,111.6 640,58.89999999999998 720,0" fill="none" stroke="#e74c3c" stroke-width="2" stroke-linejoin="round"/><circle cx="0" cy="306.9" r="4" fill="#e74c3c"><title>ys: 1</title></circle><circle cx="80" cy="297.6" r="4" fill="#e74c3c"><title>ys: 4</title></circle><circle cx="160" cy="282.1" r="4" fill="#e74c3c"><title>ys: 9</title></circle><circle cx="240" cy="260.4" r="4" fill="#e74c3c"><title>ys: 16</title></circle><circle cx="320" cy="232.5" r="4" fill="#e74c3c"><title>ys: 25</title></circle><circle cx="400" cy="198.4" r="4" fill="#e74c3c"><title>ys: 36</title></circle><circle cx="480" cy="158.1" r="4" fill="#e74c3c"><title>ys: 49</title></circle><circle cx="560" cy="111.6" r="4" fill="#e74c3c"><title>ys: 64</title></circle><circle cx="640" cy="58.89999999999998" r="4" fill="#e74c3c"><title>ys: 81</title></circle><circle cx="720" cy="0" r="4" fill="#e74c3c"><title>ys: 100</title></circle><line x1="0" y1="310" x2="720" y2="310" stroke="#333"/><line x1="0" y1="0" x2="0" y2="310" stroke="#333"/></g></svg>
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: package.json
+────────────────────────────────────────────────────────────────────────────────
+{
+  "name": "graphscript",
+  "version": "0.1.0",
+  "description": "Composable Visual Scripting for Charts, Diagrams, Algorithms, and 3D",
+  "main": "dist/cli.js",
+  "bin": {
+    "graphscript": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "test": "jest",
+    "check": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "start": "node dist/cli.js",
+    "dev": "ts-node src/cli.ts"
+  },
+  "keywords": [
+    "graphscript",
+    "visual-scripting",
+    "charts",
+    "diagrams",
+    "flowchart",
+    "algorithm"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.11.0",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "eslint": "^8.56.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: program.md
+────────────────────────────────────────────────────────────────────────────────
+# GraphScript Program.md
+
+**Project:** GraphScript  
+**Goal:** Build a composable visual scripting language for charts, diagrams, algorithms, ERD, infrastructure, and 3D.
+
+---
+
+## 1. Product statement
+
+GraphScript is a language and tooling project that should make it easy to:
+
+- write one script
+- define data and algorithms
+- generate diagrams and charts
+- embed one visual into another
+- export visuals and documents
+
+The strongest differentiator is **composition**:
+
+> a chart can come from an algorithm trace, and that chart can be embedded inside a flowchart or explanation page.
+
+That capability should drive the implementation priorities.
+
+---
+
+## 2. Product identity
+
+### Recommended product name
+**GraphScript**
+
+### Short name
+**GScript**
+
+### Tagline
+**Composable Visual Scripting for Charts, Diagrams, Algorithms, and 3D**
+
+### Why this name
+
+- matches your repository name
+- easy to remember
+- broad enough for more than charts
+- still clearly about scripting + visuals
+
+---
+
+## 3. Core product pillars
+
+GraphScript should be built around six pillars.
+
+### Pillar 1 — One language, many views
+
+One language should generate:
+
+- charts
+- flowcharts
+- diagrams
+- tables
+- ERD
+- infra diagrams
+- 3D plots
+- 3D scenes
+
+### Pillar 2 — First-class composition
+
+Everything renderable should be reusable as a submodule.
+
+### Pillar 3 — Algorithm-aware visuals
+
+Algorithms should be executable and able to emit trace data.
+
+### Pillar 4 — Easy to write
+
+The syntax should feel approachable for:
+
+- developers
+- educators
+- analysts
+- architects
+- technical writers
+
+### Pillar 5 — Strong semantics
+
+Do not reduce everything into raw rectangles and lines. Provide domain-aware blocks.
+
+### Pillar 6 — Pluggable growth
+
+Support domain packs such as AWS, quantum, signal processing, and networking.
+
+---
+
+## 4. Recommended stack
+
+This is a recommendation, not a hard rule.
+
+### 4.1 Best practical choice
+
+Use a **TypeScript monorepo**.
+
+Why:
+
+- strong ecosystem for CLI + web + editor tooling
+- easy browser renderer path
+- easy SVG/HTML generation
+- good fit for interactive diagrams and 3D through web rendering
+- good packaging story
+
+### 4.2 Suggested workspace layout
+
+```text
+graph-script/
+  packages/
+    core/
+    parser/
+    ast/
+    runtime/
+    ir/
+    layout/
+    renderer-svg/
+    renderer-html/
+    renderer-canvas/
+    renderer-webgl/
+    modules-chart/
+    modules-flow/
+    modules-table/
+    modules-erd/
+    modules-infra/
+    modules-scene3d/
+    cli/
+    lsp/
+    formatter/
+  examples/
+  docs/
+  specs/
+  tests/
+```
+
+### 4.3 Suggested package responsibilities
+
+- `core`: common types, errors, registry, symbol tables
+- `parser`: lexer/parser + AST generation
+- `ast`: syntax node definitions
+- `runtime`: evaluator for data/func/algo
+- `ir`: intermediate representation
+- `layout`: box/graph layout engine
+- `renderer-*`: output engines
+- `modules-*`: domain-specific block compilers
+- `cli`: command-line interface
+- `lsp`: language server
+- `formatter`: source formatter
+
+---
+
+## 5. Recommended architecture
+
+Use a staged compiler architecture.
+
+### Stage 1 — Parse
+
+Input `.gs` file → AST
+
+### Stage 2 — Resolve
+
+Resolve:
+
+- names
+- imports
+- exports
+- module symbols
+- component references
+
+### Stage 3 — Validate
+
+Check:
+
+- types
+- chart data shape
+- missing nodes
+- missing exports
+- invalid embeds
+- unsupported output targets
+
+### Stage 4 — Execute
+
+Run:
+
+- constants
+- data expressions
+- functions
+- algorithm blocks
+- trace emission
+
+### Stage 5 — Lower to IR
+
+Convert all visual blocks into a shared IR.
+
+### Stage 6 — Layout
+
+Calculate:
+
+- dimensions
+- routes
+- anchors
+- nested embedding
+- page placement
+
+### Stage 7 — Render
+
+Render to:
+
+- SVG
+- HTML
+- PNG
+- JSON IR
+- later: WebGL / GLB
+
+This staged model will keep the project maintainable.
+
+---
+
+## 6. Language design decisions to lock early
+
+These should be fixed early and changed rarely.
+
+### 6.1 Indentation-based syntax
+
+Keep the syntax indentation-based.
+
+Reason:
+
+- easier to read
+- better for docs/examples
+- natural for structured visuals
+
+### 6.2 Domain blocks, not only primitives
+
+Keep blocks like:
+
+- `chart`
+- `flow`
+- `erd`
+- `infra`
+- `scene3d`
+
+Do not force everything to be drawn manually with `box`, `line`, and `text` only.
+
+### 6.3 Shared IR
+
+All visuals must compile to the same semantic IR family.
+
+### 6.4 Composition as a first-class feature
+
+`sub`, `component`, `export`, and `embed` must be part of the original design, not bolted on later.
+
+### 6.5 Deterministic runtime
+
+Keep algorithm execution deterministic by default.
+
+---
+
+## 7. MVP scope
+
+Build the smallest version that proves the language identity.
+
+### MVP must include
+
+- parser
+- `data`
+- `func`
+- `algo`
+- `pseudo`
+- `chart`
+- `flow`
+- `table`
+- `sub` / `component` / `export` / `embed`
+- page layout
+- SVG export
+- CLI `check`, `run`, `render`, `fmt`
+
+### MVP should prove
+
+1. algorithm emits trace
+2. chart reads trace
+3. flow embeds chart
+4. page combines multiple visuals
+
+If MVP can do those four things well, the project is already differentiated.
+
+---
+
+## 8. Delivery roadmap
+
+### Phase 0 — Repo foundation
+
+Deliver:
+
+- monorepo setup
+- build system
+- lint/test setup
+- package boundaries
+- CI for test + typecheck
+- docs skeleton
+
+Exit criteria:
+
+- repository builds cleanly
+- sample CLI command works
+
+### Phase 1 — Parser + AST
+
+Deliver:
+
+- tokenizer
+- parser
+- AST node definitions
+- source spans for diagnostics
+- error recovery for common syntax mistakes
+
+Exit criteria:
+
+- `.gs` files parse into stable AST
+- parser snapshots exist for sample files
+
+### Phase 2 — Runtime core
+
+Deliver:
+
+- values and environments
+- expression evaluator
+- function runtime
+- algorithm runtime
+- trace collector
+
+Exit criteria:
+
+- algorithm examples run and emit trace tables
+
+### Phase 3 — IR + layout foundation
+
+Deliver:
+
+- IR types
+- layout box model
+- anchor system
+- graph edge routing base
+- embed placeholder behavior
+
+Exit criteria:
+
+- nested visuals can be laid out reliably
+
+### Phase 4 — 2D renderer and core modules
+
+Deliver:
+
+- SVG renderer
+- chart module
+- flow module
+- table module
+- pseudo rendering
+
+Exit criteria:
+
+- export example report as SVG/PNG
+
+### Phase 5 — Composition system
+
+Deliver:
+
+- `sub`
+- `component`
+- `export`
+- `embed`
+- `slot`
+
+Exit criteria:
+
+- chart inside flow node works
+- pseudocode inside process explanation works
+
+### Phase 6 — ERD and infrastructure
+
+Deliver:
+
+- `erd`
+- `infra generic`
+- `infra aws`
+- icon registry
+- group/container rendering
+
+Exit criteria:
+
+- one ERD example and one AWS example render correctly
+
+### Phase 7 — 3D pipeline
+
+Deliver:
+
+- `plot3d`
+- `scene3d`
+- camera/light model
+- WebGL/HTML renderer path
+- optional raster output
+
+Exit criteria:
+
+- one 3D plot and one 3D object example render correctly
+
+### Phase 8 — Tooling polish
+
+Deliver:
+
+- formatter
+- LSP
+- hover/completion
+- error docs
+- starter templates
+- playground
+
+Exit criteria:
+
+- new users can create their first `.gs` file quickly
+
+---
+
+## 9. Detailed feature matrix
+
+### 9.1 Core language
+
+Required:
+
+- variables and constants
+- expressions
+- functions
+- lists/maps/records
+- imports
+- module resolution
+- comments
+- deterministic execution
+
+### 9.2 Algorithm system
+
+Required:
+
+- local state
+- loops
+- conditions
+- return values
+- `emit`
+- trace tables
+- algorithm outputs
+
+### 9.3 Chart system
+
+Required:
+
+- line
+- scatter
+- bar
+- multi-series
+- annotations
+- axes and labels
+- chart from trace/table
+
+### 9.4 Flow system
+
+Required:
+
+- node types
+- orthogonal routing
+- decision edge labels
+- group boxes
+- embedded visuals
+
+### 9.5 Generic diagram system
+
+Required:
+
+- panel
+- text
+- box
+- arrow
+- icon
+- image
+- grid/checker
+- freeform positioning when needed
+
+### 9.6 Table system
+
+Required:
+
+- columns and rows
+- auto sizing
+- alignment
+- cell formatting
+- source from data or trace
+
+### 9.7 ERD system
+
+Required:
+
+- tables
+- fields
+- PK/FK
+- relationships
+- schema grouping
+
+### 9.8 Infrastructure system
+
+Required:
+
+- provider-specific nodes
+- containers/boundaries
+- arrows
+- labels
+- grouped deployment zones
+
+### 9.9 3D system
+
+Required for later phase:
+
+- surface plots
+- 3D axes
+- scene graph
+- camera and light
+- basic mesh primitives
+
+### 9.10 Composition system
+
+Required:
+
+- submodules
+- exports
+- embeds
+- slots
+- parent-child theme control
+
+---
+
+## 10. Recommended repo docs
+
+Create these docs as soon as possible:
+
+- `README.md` — project overview
+- `SPEC.md` — language specification
+- `program.md` — build plan and milestones
+- `docs/syntax.md` — quick syntax guide
+- `docs/components.md` — sub/embed system
+- `docs/charts.md`
+- `docs/flow.md`
+- `docs/erd.md`
+- `docs/infra.md`
+- `docs/scene3d.md`
+- `docs/cli.md`
+- `docs/errors.md`
+- `examples/README.md`
+
+---
+
+## 11. Example repo structure for v1
+
+```text
+graph-script/
+  README.md
+  SPEC.md
+  program.md
+  package.json
+  tsconfig.json
+  packages/
+    ast/
+    parser/
+    runtime/
+    ir/
+    layout/
+    renderer-svg/
+    modules-chart/
+    modules-flow/
+    modules-table/
+    cli/
+  examples/
+    hello-chart.gs
+    search-trace.gs
+    chart-in-flow.gs
+    oracle-explanation.gs
+    fft-demo.gs
+  tests/
+    parser/
+    runtime/
+    render/
+```
+
+---
+
+## 12. First five example files to ship
+
+These matter a lot because they define how users understand the language.
+
+### Example 1 — `hello-chart.gs`
+
+Shows:
+
+- `data`
+- `chart`
+- render to SVG
+
+### Example 2 — `binary-search.gs`
+
+Shows:
+
+- `algo`
+- `emit`
+- trace generation
+- `pseudo`
+
+### Example 3 — `chart-in-flow.gs`
+
+Shows:
+
+- `sub`
+- `component`
+- `embed`
+- page layout
+
+### Example 4 — `oracle-explanation.gs`
+
+Shows:
+
+- infographic / flow hybrid
+- educational layout
+- boxes, labels, arrows
+
+### Example 5 — `infra-aws.gs`
+
+Shows:
+
+- AWS provider
+- grouped infrastructure visualization
+
+These examples should be treated as product assets, not throwaway test files.
+
+---
+
+## 13. CLI plan
+
+Recommended CLI commands:
+
+```bash
+graphscript new project-name
+graphscript check file.gs
+graphscript run file.gs
+graphscript render file.gs -o out/
+graphscript fmt file.gs
+graphscript doctor
+graphscript lsp
+```
+
+### Behavior notes
+
+- `check`: parse + validate, no render
+- `run`: execute algorithms and show trace/diagnostics
+- `render`: render declared targets
+- `fmt`: canonical formatting
+- `doctor`: environment/debug info
+- `new`: starter templates
+
+---
+
+## 14. Editor experience plan
+
+The language will feel much better if editor support comes early.
+
+### LSP features for early delivery
+
+- syntax highlight
+- parse diagnostics
+- go-to definition
+- hover docs for built-ins
+- completion for block types and common fields
+- formatter integration
+
+### Later LSP features
+
+- preview link to rendered outputs
+- inline warnings for data shape mismatch
+- provider-specific completion for infra nodes
+
+---
+
+## 15. Testing strategy
+
+### 15.1 Parser tests
+
+Use snapshot tests for AST.
+
+### 15.2 Runtime tests
+
+Test:
+
+- expression evaluation
+- deterministic algorithm results
+- trace contents
+
+### 15.3 Rendering tests
+
+Test:
+
+- IR snapshots
+- SVG snapshots
+- layout sanity assertions
+
+### 15.4 Golden examples
+
+Maintain canonical golden files for example outputs.
+
+This is important for a visual language.
+
+---
+
+## 16. Performance plan
+
+Performance matters later, but architecture should not block it.
+
+### Early priorities
+
+- fast parse
+- incremental validation later
+- avoid repeated recomputation during render
+
+### Heavy cases to plan for
+
+- large tables
+- many-node flowcharts
+- large infrastructure diagrams
+- dense scatter plots
+- nested embeds
+
+---
+
+## 17. UX rules for language ergonomics
+
+To make GraphScript easy and pleasant to use:
+
+### Rule 1
+Prefer semantic blocks over low-level drawing.
+
+### Rule 2
+Allow quick defaults.
+
+Example:
+
+```graphscript
+chart "Sales":
+  type = line
+  x = months
+  y = revenue
+```
+
+That should already render nicely without too much styling.
+
+### Rule 3
+Keep naming predictable.
+
+### Rule 4
+Every important feature needs one minimal example.
+
+### Rule 5
+Composition should feel natural, not magical.
+
+---
+
+## 18. Hard problems to solve carefully
+
+These are the real design traps.
+
+### 18.1 Layout of embedded visuals
+
+This is the most important hard problem.
+
+Need rules for:
+
+- intrinsic size
+- scaling
+- caption inheritance
+- alignment
+- padding and clipping
+
+### 18.2 Shared style model
+
+Need a clear theme/style cascade that works across chart, flow, ERD, infra, and 3D.
+
+### 18.3 Data shape validation
+
+Charts and tables must validate data early and clearly.
+
+### 18.4 Cross-module references
+
+Need clean symbol resolution for:
+
+- `search.chart`
+- `BinarySearch.trace`
+- imported components
+
+### 18.5 Provider-specific infra modeling
+
+Need a good split between:
+
+- generic infra semantics
+- provider icon packs and shortcuts
+
+---
+
+## 19. Suggested initial milestones
+
+### Milestone A — “Hello World Visual”
+
+Success criteria:
+
+- render a simple line chart from a `.gs` file
+
+### Milestone B — “Algorithm to Chart”
+
+Success criteria:
+
+- run an algorithm
+- emit trace
+- render trace as chart
+
+### Milestone C — “Chart inside Flow”
+
+Success criteria:
+
+- embed chart and pseudocode inside flow nodes
+
+### Milestone D — “Report Page”
+
+Success criteria:
+
+- compose flow + chart + table on one page
+
+### Milestone E — “Architecture and Schema”
+
+Success criteria:
+
+- ERD and AWS examples available
+
+### Milestone F — “3D Demo”
+
+Success criteria:
+
+- one 3D plot and one 3D scene working
+
+---
+
+## 20. Recommended public positioning
+
+Describe GraphScript like this:
+
+> GraphScript is a composable visual scripting language for charts, diagrams, algorithms, infrastructure, database design, and 3D scenes.
+
+Shorter version:
+
+> One script. Many visuals. Reusable everywhere.
+
+---
+
+## 21. How to keep scope under control
+
+This project can grow too wide very quickly.
+
+Use this priority order:
+
+1. composition model
+2. parser/runtime
+3. chart + flow + page
+4. ERD + infra
+5. 3D
+6. plugin ecosystem
+
+If composition is weak, the language becomes just another diagram DSL.
+
+If composition is strong, the project becomes unique.
+
+---
+
+## 22. Immediate next actions
+
+### Action 1
+Commit the spec and program docs.
+
+### Action 2
+Settle core syntax and file extension.
+
+### Action 3
+Implement parser for:
+
+- `use`
+- `data`
+- `func`
+- `algo`
+- `pseudo`
+- `chart`
+- `flow`
+- `sub`
+- `component`
+- `page`
+
+### Action 4
+Build one end-to-end example:
+
+- algorithm
+- trace
+- chart
+- flow embed
+- SVG export
+
+### Action 5
+Only after that, add ERD and infra.
+
+---
+
+## 23. Final program principle
+
+Do not try to win by supporting every feature immediately.
+
+Win by making this workflow feel amazing:
+
+1. write data and algorithm
+2. visualize result as chart
+3. explain it with flowchart and pseudocode
+4. reuse the result inside bigger pages and diagrams
+
+That workflow is the real identity of GraphScript.
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: SPEC.md
+────────────────────────────────────────────────────────────────────────────────
+# GraphScript Specification
+
+**Project name:** GraphScript  
+**Short name:** GScript  
+**Language ID:** `graphscript`  
+**File extension:** `.gs`  
+**Current spec version:** `0.1-draft`
+
+---
+
+## 1. Vision
+
+GraphScript is a **composable visual scripting language** for building:
+
+- 2D charts and scientific plots
+- flowcharts and process diagrams
+- pseudocode and executable algorithms
+- infographic-style diagrams
+- tables and state snapshots
+- 3D plots and 3D scenes
+- database diagrams / ERD
+- infrastructure diagrams, including AWS-style architectures
+- reusable visual modules that can be embedded inside other visuals
+
+GraphScript is not only a chart language. It is a **unified DSL for computation, explanation, and rendering**.
+
+The core idea is:
+
+> write one script, generate many views, and reuse one view inside another.
+
+Examples:
+
+- an `algo` block can emit trace data
+- a `chart` block can render that trace
+- a `flow` block can embed the chart into a process node
+- a `page` block can place flowchart + pseudocode + table into one explainable artifact
+
+---
+
+## 2. Design goals
+
+### 2.1 Primary goals
+
+1. **Easy to write**
+   - simple indentation-based syntax
+   - readable like Python/YAML, but with strong structure
+2. **Composable**
+   - every renderable object can become a `sub` / component
+3. **Multi-domain**
+   - charts, flowcharts, ERD, infra, 3D, algorithm traces, tables
+4. **Scriptable**
+   - variables, functions, loops, expressions, imports, reusable components
+5. **Deterministic**
+   - same input script should produce the same result unless randomness is explicit
+6. **Extensible**
+   - domain modules can be added without breaking core syntax
+7. **Explainable**
+   - ideal for teaching, documentation, reports, architecture, scientific explanation
+
+### 2.2 Non-goals
+
+GraphScript is not intended to replace:
+
+- a full general-purpose programming language
+- a full CAD system
+- a full game engine
+- a pixel-perfect manual illustration tool
+
+Instead, GraphScript should cover the sweet spot between:
+
+- **diagram DSL**
+- **scientific plotting**
+- **architecture description**
+- **algorithm explanation**
+- **scene specification**
+
+---
+
+## 3. Language model
+
+GraphScript has three layers:
+
+### 3.1 Core language
+
+The core language provides:
+
+- variables
+- expressions
+- functions
+- blocks
+- imports
+- namespaces
+- component references
+- styles and themes
+- layout primitives
+
+### 3.2 Domain modules
+
+Domain modules provide higher-level meaning:
+
+- `chart`
+- `flow`
+- `diagram`
+- `table`
+- `algo`
+- `pseudo`
+- `plot3d`
+- `scene3d`
+- `erd`
+- `infra`
+- `quantum` (optional extension)
+
+### 3.3 Composition system
+
+The composition system enables:
+
+- `sub` reusable modules
+- `component` instances
+- `embed` child views into parent views
+- `export` named outputs from a module
+- `slot` placeholders for configurable composition
+
+This is the feature that allows “chart inside flowchart”, “algorithm inside process explanation”, and “diagram inside report”.
+
+---
+
+## 4. File structure and top-level grammar
+
+A GraphScript file is a sequence of top-level declarations.
+
+### 4.1 Top-level declarations
+
+Supported top-level blocks:
+
+- `use`
+- `import`
+- `const`
+- `data`
+- `func`
+- `theme`
+- `style`
+- `sub`
+- `algo`
+- `pseudo`
+- `chart`
+- `flow`
+- `diagram`
+- `table`
+- `plot3d`
+- `scene3d`
+- `erd`
+- `infra`
+- `page`
+- `render`
+
+### 4.2 Example file
+
+```graphscript
+use chart
+use flow
+use infra.aws
+
+const app_name = "Search Demo"
+
+data:
+  xs = range(-6, 6, 0.1)
+  ys = 1 / (1 + exp(-xs))
+
+chart "Sigmoid":
+  type = line
+  x = xs
+  y = ys
+  xlabel = "x"
+  ylabel = "sigmoid(x)"
+
+flow "Overview":
+  start -> process "Generate"
+  process "Generate" -> end
+```
+
+---
+
+## 5. Syntax rules
+
+### 5.1 Block syntax
+
+GraphScript uses **significant indentation**.
+
+- A block header ends with `:`
+- Indented lines belong to that block
+- Tabs are not allowed; use spaces only
+- Recommended indentation: 2 spaces
+
+Example:
+
+```graphscript
+chart "Example":
+  type = line
+  x = [1, 2, 3]
+  y = [4, 5, 6]
+```
+
+### 5.2 Comments
+
+Single-line comments start with `#`.
+
+```graphscript
+# this is a comment
+```
+
+### 5.3 Identifiers
+
+Identifiers must:
+
+- start with a letter or `_`
+- contain letters, digits, `_`, and `.` for qualified names
+
+Examples:
+
+- `sales`
+- `_private`
+- `theme.dark`
+- `search.trace`
+
+### 5.4 Strings
+
+Strings can use single or double quotes.
+
+```graphscript
+name = "GraphScript"
+kind = 'flow'
+```
+
+### 5.5 Collections
+
+- lists: `[1, 2, 3]`
+- tuples: `(1, 2, 3)`
+- maps: `{ key: value, other: 10 }`
+
+### 5.6 Function call syntax
+
+```graphscript
+xs = range(0, 10, 0.5)
+y = sigmoid(xs)
+```
+
+### 5.7 Operators
+
+Arithmetic:
+
+- `+ - * / % ^`
+
+Comparison:
+
+- `== != < <= > >=`
+
+Boolean:
+
+- `and or not`
+
+Membership:
+
+- `in`, `not in`
+
+Range and indexing:
+
+- `arr[0]`
+- `table["col"]`
+- `node.outputs.main`
+
+---
+
+## 6. Core data model
+
+### 6.1 Primitive types
+
+- `number`
+- `string`
+- `bool`
+- `null`
+
+### 6.2 Structural types
+
+- `list<T>`
+- `map<K,V>`
+- `tuple`
+- `record`
+- `table`
+- `trace`
+- `point2`
+- `point3`
+- `color`
+- `duration`
+
+### 6.3 Visual object types
+
+- `chart_spec`
+- `flow_spec`
+- `diagram_spec`
+- `table_spec`
+- `plot3d_spec`
+- `scene3d_spec`
+- `erd_spec`
+- `infra_spec`
+- `component_instance`
+- `layout_box`
+
+### 6.4 Special runtime values
+
+- `this` = current block context
+- `theme` = current theme values
+- `env` = CLI/render environment
+
+---
+
+## 7. Imports and modules
+
+### 7.1 `use`
+
+`use` enables language modules.
+
+```graphscript
+use chart
+use flow
+use scene3d
+use infra.aws
+```
+
+### 7.2 `import`
+
+`import` imports symbols or files.
+
+```graphscript
+import "common/theme.gs"
+import SearchModule from "modules/search.gs"
+import { colors, spacing } from "tokens.gs"
+```
+
+### 7.3 Standard module namespaces
+
+Recommended built-in modules:
+
+- `core`
+- `math`
+- `chart`
+- `flow`
+- `diagram`
+- `table`
+- `layout`
+- `plot3d`
+- `scene3d`
+- `erd`
+- `infra`
+- `infra.aws`
+- `icons`
+- `theme`
+
+---
+
+## 8. Constants, data, and functions
+
+### 8.1 `const`
+
+Use `const` for immutable bindings.
+
+```graphscript
+const title = "FFT Analysis"
+const threshold = 0.9
+```
+
+### 8.2 `data`
+
+`data` defines datasets, tables, arrays, and derived values.
+
+```graphscript
+data:
+  xs = range(0, 10, 0.1)
+  ys = sin(xs)
+  rows = [
+    { step: 1, op: "init" },
+    { step: 2, op: "apply H" }
+  ]
+```
+
+### 8.3 `func`
+
+Functions are pure by default.
+
+```graphscript
+func sigmoid(x):
+  return 1 / (1 + exp(-x))
+```
+
+Multi-line example:
+
+```graphscript
+func normalize(vs):
+  lo = min(vs)
+  hi = max(vs)
+  return map(vs, (v) => (v - lo) / (hi - lo))
+```
+
+---
+
+## 9. Themes and styles
+
+### 9.1 `theme`
+
+Themes define reusable design tokens.
+
+```graphscript
+theme dark:
+  colors:
+    bg = "#0f172a"
+    panel = "#111827"
+    text = "#e5e7eb"
+    accent = "#60a5fa"
+  spacing:
+    xs = 4
+    sm = 8
+    md = 16
+    lg = 24
+  font:
+    family = "Inter"
+    size = 14
+```
+
+### 9.2 `style`
+
+Styles define reusable visual rules.
+
+```graphscript
+style info_card:
+  fill = theme.colors.panel
+  stroke = theme.colors.accent
+  radius = 12
+  padding = theme.spacing.md
+```
+
+### 9.3 Style application
+
+A block may reference styles:
+
+```graphscript
+chart "Sales":
+  style = info_card
+```
+
+---
+
+## 10. Submodules, components, and composition
+
+This is the heart of GraphScript.
+
+### 10.1 `sub`
+
+A `sub` block defines a reusable module.
+
+```graphscript
+sub SearchModule(arr, target):
+  algo BinarySearch(arr, target):
+    # ...
+
+  pseudo "Binary Search":
+    # ...
+
+  chart "Mid Trace":
+    source = BinarySearch.trace
+    type = line
+    x = step
+    y = mid
+
+  export chart = "Mid Trace"
+  export pseudo = "Binary Search"
+  export trace = BinarySearch.trace
+```
+
+### 10.2 `component`
+
+A `component` instantiates a submodule.
+
+```graphscript
+component search = SearchModule(arr=data.items, target=42)
+```
+
+### 10.3 `export`
+
+Exports allow named outputs from a submodule.
+
+Allowed exports:
+
+- visual blocks
+- trace outputs
+- tables
+- computed values
+- render targets
+
+### 10.4 `embed`
+
+`embed` inserts one visual into another.
+
+```graphscript
+flow "Explain Search":
+  node step1 type=process label="Binary Search"
+  embed step1.right = search.chart
+  embed step1.bottom = search.pseudo
+```
+
+### 10.5 `slot`
+
+A submodule can declare slots for customization.
+
+```graphscript
+sub AnalysisCard(title, body):
+  slot header
+  slot detail
+
+  diagram "Card":
+    panel root:
+      text title at top
+      embed slot.header at header_area
+      embed body at main_area
+      embed slot.detail at footer_area
+```
+
+### 10.6 Composition rules
+
+1. Every visual object has a bounding box and anchor points.
+2. Embedded visuals must expose intrinsic size or resizable layout constraints.
+3. Parent visuals may override child theme, size, scale, and caption.
+4. Child visuals keep semantic identity for interactive use.
+
+---
+
+## 11. Algorithms and runtime execution
+
+### 11.1 `algo`
+
+`algo` is an executable procedural block.
+
+It supports:
+
+- local variables
+- `if`, `else if`, `else`
+- `for`, `while`
+- `break`, `continue`, `return`
+- collection helpers
+- explicit trace emission
+
+### 11.2 Example
+
+```graphscript
+algo BinarySearch(arr, target):
+  low = 0
+  high = len(arr) - 1
+  step = 0
+
+  while low <= high:
+    mid = floor((low + high) / 2)
+
+    emit:
+      step = step
+      low = low
+      high = high
+      mid = mid
+      value = arr[mid]
+
+    if arr[mid] == target:
+      return mid
+    else if arr[mid] < target:
+      low = mid + 1
+    else:
+      high = mid - 1
+
+    step = step + 1
+
+  return -1
+```
+
+### 11.3 `emit`
+
+`emit` appends rows into an algorithm trace.
+
+The runtime automatically creates `BinarySearch.trace` with rows:
+
+- `step`
+- `low`
+- `high`
+- `mid`
+- `value`
+
+### 11.4 Determinism
+
+Algorithms must be deterministic by default.
+
+If randomness is needed, it must be explicit:
+
+```graphscript
+rng = random(seed=123)
+```
+
+### 11.5 Side effects
+
+Runtime side effects are restricted.
+
+Safe default behavior:
+
+- no arbitrary file writes inside language runtime
+- no network calls unless enabled by host
+- no shell execution in core language
+
+---
+
+## 12. Pseudocode blocks
+
+### 12.1 `pseudo`
+
+`pseudo` defines readable algorithm-like text for explanation.
+
+```graphscript
+pseudo "Binary Search":
+  function binary_search(arr, target):
+    low <- 0
+    high <- len(arr) - 1
+    while low <= high:
+      mid <- floor((low + high) / 2)
+      if arr[mid] == target:
+        return mid
+      else if arr[mid] < target:
+        low <- mid + 1
+      else:
+        high <- mid - 1
+    return -1
+```
+
+### 12.2 Pseudocode semantics
+
+`pseudo` is presentation-first.
+
+It is not required to be executable.
+
+However, a `pseudo` block may optionally reference an `algo` block:
+
+```graphscript
+pseudo "Binary Search" from BinarySearch
+```
+
+This enables auto-generated pseudocode from executable logic.
+
+---
+
+## 13. 2D charts and scientific plots
+
+### 13.1 `chart`
+
+A `chart` block defines 2D plots.
+
+Supported kinds in the base spec:
+
+- `line`
+- `scatter`
+- `bar`
+- `area`
+- `histogram`
+- `pie`
+- `heatmap`
+- `contour`
+- `parametric`
+- `spectrum`
+
+### 13.2 Basic line chart
+
+```graphscript
+chart "Sigmoid Curve":
+  type = line
+  x = xs
+  y = ys
+  xlabel = "x"
+  ylabel = "sigmoid(x)"
+  grid = true
+```
+
+### 13.3 Multi-series chart
+
+```graphscript
+chart "Activations":
+  type = line
+  series:
+    - label = "sigmoid"
+      x = xs
+      y = sigmoid(xs)
+    - label = "tanh"
+      x = xs
+      y = tanh(xs)
+```
+
+### 13.4 Chart from table or trace
+
+```graphscript
+chart "Search Trace":
+  source = BinarySearch.trace
+  type = line
+  x = step
+  y = mid
+```
+
+### 13.5 Annotations
+
+```graphscript
+chart "FFT":
+  type = spectrum
+  x = freqs
+  y = amps
+  annotate peak at (50, 1.2) label="50 Hz"
+  annotate peak at (120, 0.7) label="120 Hz"
+```
+
+### 13.6 Layout inside charts
+
+Charts may expose regions:
+
+- `plot`
+- `legend`
+- `title`
+- `caption`
+- `left`
+- `right`
+- `top`
+- `bottom`
+
+These regions allow embedded content when supported by the renderer.
+
+---
+
+## 14. Flowcharts and process diagrams
+
+### 14.1 `flow`
+
+A `flow` block defines semantic node-edge diagrams.
+
+### 14.2 Built-in node types
+
+- `start`
+- `end`
+- `process`
+- `decision`
+- `input`
+- `output`
+- `data`
+- `subprocess`
+- `note`
+
+### 14.3 Basic example
+
+```graphscript
+flow "Oracle Classification":
+  node input type=input label="Masukan x ∈ {0,1}^n"
+  node oracle type=process label="Oracle (Kotak Hitam)"
+  node c0 type=process label="f(x)=0 untuk semua x"
+  node c1 type=process label="f(x)=1 untuk semua x"
+  node bal type=process label="balanced"
+
+  input -> oracle
+  oracle -> c0 label="Kasus 1"
+  oracle -> c1 label="Kasus 2"
+  oracle -> bal label="Kasus 3/4"
+```
+
+### 14.4 Embedded visuals in flow nodes
+
+```graphscript
+flow "Explain Search":
+  node run type=process label="Run Binary Search"
+  embed run.right = search.chart
+  embed run.bottom = search.pseudo
+```
+
+### 14.5 Flow layout options
+
+- `direction = top_down | left_right | radial`
+- `routing = orthogonal | straight | curved`
+- `node_spacing`
+- `layer_spacing`
+- `pack_groups = true | false`
+
+---
+
+## 15. Generic diagrams and infographics
+
+### 15.1 `diagram`
+
+`diagram` is the free-form visual block for infographic-style layouts.
+
+Use it when the structure is not naturally a chart, flowchart, ERD, or infra diagram.
+
+### 15.2 Built-in primitives
+
+- `panel`
+- `group`
+- `box`
+- `circle`
+- `ellipse`
+- `line`
+- `arrow`
+- `path`
+- `grid`
+- `checker`
+- `text`
+- `image`
+- `icon`
+- `badge`
+- `callout`
+
+### 15.3 Example
+
+```graphscript
+diagram "Oracle Status":
+  panel root:
+    grid left_grid rows=4 cols=4 fill="blue"
+    checker right_grid rows=4 cols=4 colors=["blue", "orange"]
+    circle or_badge label="OR"
+    text left_title value="KONDISI KONSTAN"
+    text right_title value="KONDISI SEIMBANG"
+```
+
+### 15.4 Use cases
+
+- presentations
+- architecture cards
+- step-by-step explanation panels
+- concept diagrams
+- educational visualizations
+
+---
+
+## 16. Tables
+
+### 16.1 `table`
+
+A `table` block renders tabular data.
+
+```graphscript
+table "Quantum Steps":
+  columns = ["Step", "Operasi", "q0", "q1", "q2", "q3", "Keterangan"]
+  rows = steps
+```
+
+### 16.2 Table sources
+
+`rows` may come from:
+
+- inline records
+- `data` block tables
+- `algo.trace`
+- imported CSV/JSON sources
+
+### 16.3 Table features
+
+- merged cells
+- row striping
+- cell formatting
+- math formatting
+- icon-in-cell
+- row highlighting
+
+---
+
+## 17. 3D plots
+
+### 17.1 `plot3d`
+
+`plot3d` renders mathematical or data-driven 3D views.
+
+Supported kinds:
+
+- `surface`
+- `wireframe`
+- `scatter3d`
+- `line3d`
+- `vector_field`
+- `parametric_surface`
+
+### 17.2 Example
+
+```graphscript
+plot3d "Wave Surface":
+  type = surface
+  x = range(-5, 5, 0.2)
+  y = range(-5, 5, 0.2)
+  z = sin(x) * cos(y)
+  axes = true
+  colormap = "viridis"
+```
+
+### 17.3 3D chart options
+
+- `camera`
+- `lights`
+- `axes`
+- `grid`
+- `legend`
+- `labels`
+- `clip`
+
+---
+
+## 18. 3D scenes and object rendering
+
+### 18.1 `scene3d`
+
+`scene3d` is used for object-based rendering.
+
+Supported primitives:
+
+- `cube`
+- `sphere`
+- `cylinder`
+- `cone`
+- `plane`
+- `line3`
+- `arrow3`
+- `text3`
+- `mesh`
+- `group`
+
+### 18.2 Example
+
+```graphscript
+scene3d "Bloch Demo":
+  camera at (4, 3, 6)
+  light sun intensity=1.0 direction=(1, -1, -1)
+
+  object sphere bloch:
+    radius = 1
+    wireframe = true
+
+  object arrow3 state:
+    from = (0, 0, 0)
+    to = (0, -1, 0)
+    color = "blue"
+```
+
+### 18.3 Transform model
+
+Each object supports:
+
+- `position`
+- `rotation`
+- `scale`
+- `pivot`
+
+### 18.4 Material model
+
+Recommended built-in materials:
+
+- `flat`
+- `matte`
+- `gloss`
+- `metal`
+- `glass`
+- `wire`
+
+---
+
+## 19. Database design and ERD
+
+### 19.1 `erd`
+
+`erd` is a database/schema modeling block.
+
+### 19.2 Example
+
+```graphscript
+erd "ShopDB":
+  table users:
+    id int pk
+    email varchar unique
+    created_at datetime
+
+  table orders:
+    id int pk
+    user_id int fk users.id
+    total decimal
+    created_at datetime
+
+  table order_items:
+    id int pk
+    order_id int fk orders.id
+    product_id int fk products.id
+    qty int
+
+  users.id 1--* orders.user_id
+  orders.id 1--* order_items.order_id
+```
+
+### 19.3 ERD semantics
+
+Tables, fields, keys, and relationships should remain machine-readable.
+
+This allows future outputs such as:
+
+- rendered ER diagram
+- DDL generation
+- schema documentation
+- migration summary
+
+### 19.4 Recommended ERD features
+
+- field types
+- PK / FK / unique / nullable flags
+- index metadata
+- enum support
+- group by schema
+- crow’s foot and classic relation styles
+
+---
+
+## 20. Infrastructure diagrams
+
+### 20.1 `infra`
+
+`infra` models systems and cloud architectures.
+
+### 20.2 Providers
+
+Base providers:
+
+- `generic`
+- `aws`
+- `gcp`
+- `azure`
+- `k8s`
+
+### 20.3 AWS example
+
+```graphscript
+infra aws "Web Platform":
+  region "ap-southeast-1"
+
+  vpc main:
+    cidr = "10.0.0.0/16"
+
+  subnet public_a in main:
+    type = public
+
+  subnet private_a in main:
+    type = private
+
+  alb edge in public_a
+  ecs api in private_a
+  rds postgres in private_a
+  s3 assets
+
+  edge -> api
+  api -> postgres
+  api -> assets
+```
+
+### 20.4 Infrastructure features
+
+- containers / boundaries (VPC, subnet, cluster, namespace)
+- service icons
+- directional edges
+- labels and protocols
+- group nesting
+- environment tags (`dev`, `staging`, `prod`)
+- secrets/data flow overlays
+
+---
+
+## 21. Page layout and multi-view documents
+
+### 21.1 `page`
+
+`page` combines multiple visuals into one document or slide-like layout.
+
+```graphscript
+page "Binary Search Report":
+  layout = grid(columns=2, rows=2, gap=16)
+
+  place search.chart at cell(1, 1)
+  place search.pseudo at cell(1, 2)
+  place SearchFlow at cell(2, 1..2)
+```
+
+### 21.2 Use cases
+
+- report page
+- explanation sheet
+- poster
+- exportable slide page
+- dashboard-style static layout
+
+---
+
+## 22. Render blocks and outputs
+
+### 22.1 `render`
+
+`render` declares output targets.
+
+```graphscript
+render:
+  target chart "Sigmoid Curve" to "out/sigmoid.svg"
+  target page "Binary Search Report" to "out/report.png"
+  target scene3d "Bloch Demo" to "out/bloch.glb"
+```
+
+### 22.2 Supported output formats
+
+Recommended outputs for v1:
+
+- `svg`
+- `png`
+- `pdf`
+- `html`
+- `json` (IR export)
+
+Recommended outputs for later versions:
+
+- `glb`
+- `obj`
+- `mp4`
+- `gif`
+
+---
+
+## 23. Layout system
+
+### 23.1 Layout primitives
+
+Recommended layout primitives:
+
+- `stack`
+- `row`
+- `column`
+- `grid`
+- `absolute`
+- `anchor`
+- `fit`
+
+### 23.2 Constraints
+
+Each visual object may expose:
+
+- intrinsic width / height
+- minimum size
+- preferred size
+- grow / shrink weight
+- anchor points
+- padding / margin
+
+### 23.3 Embedding policy
+
+When a child view is embedded inside another view:
+
+- scale may be `fit`, `fill`, or `native`
+- caption may be hidden or inherited
+- theme may be inherited or isolated
+
+---
+
+## 24. Semantic intermediate representation (IR)
+
+GraphScript should compile into a shared IR before rendering.
+
+### 24.1 Why IR matters
+
+IR is what makes cross-domain composition possible.
+
+### 24.2 IR object families
+
+Recommended IR families:
+
+- `ValueNode`
+- `TableNode`
+- `TraceNode`
+- `VisualNode`
+- `LayoutNode`
+- `TextNode`
+- `ShapeNode`
+- `ChartNode`
+- `FlowNode`
+- `SceneNode`
+- `EntityNode`
+- `InfraNode`
+- `EmbedNode`
+
+### 24.3 Render pipeline
+
+1. parse source
+2. build AST
+3. name resolution
+4. type/shape validation
+5. execute data/functions/algorithms
+6. produce IR
+7. layout pass
+8. render pass
+9. export
+
+---
+
+## 25. Type checking and validation
+
+### 25.1 Validation categories
+
+- syntax errors
+- unknown symbol errors
+- type mismatch errors
+- invalid shape/layout errors
+- cyclic composition errors
+- missing export/slot errors
+- invalid renderer capability errors
+
+### 25.2 Example diagnostics
+
+- `chart "A": x and y have different lengths`
+- `embed step1.right = search.chart failed: export 'chart' not found`
+- `scene3d output to SVG is unsupported unless rasterize=true`
+
+---
+
+## 26. Standard library recommendations
+
+### 26.1 Math
+
+- `sin`, `cos`, `tan`
+- `exp`, `log`, `sqrt`
+- `sigmoid`
+- `floor`, `ceil`, `round`
+- `abs`, `min`, `max`, `clamp`
+
+### 26.2 Data helpers
+
+- `range`
+- `linspace`
+- `map`
+- `filter`
+- `reduce`
+- `zip`
+- `group_by`
+- `sort_by`
+- `unique`
+
+### 26.3 Table helpers
+
+- `select`
+- `join`
+- `pivot`
+- `summarize`
+
+### 26.4 Layout helpers
+
+- `grid`
+- `stack`
+- `fit`
+- `anchor`
+
+---
+
+## 27. Example: full composition
+
+```graphscript
+use chart
+use flow
+use table
+
+sub SearchModule(arr, target):
+  algo BinarySearch(arr, target):
+    low = 0
+    high = len(arr) - 1
+    step = 0
+
+    while low <= high:
+      mid = floor((low + high) / 2)
+
+      emit:
+        step = step
+        low = low
+        high = high
+        mid = mid
+        value = arr[mid]
+
+      if arr[mid] == target:
+        return mid
+      else if arr[mid] < target:
+        low = mid + 1
+      else:
+        high = mid - 1
+
+      step = step + 1
+
+    return -1
+
+  pseudo "Binary Search":
+    function binary_search(arr, target):
+      low <- 0
+      high <- len(arr) - 1
+      while low <= high:
+        mid <- floor((low + high) / 2)
+        if arr[mid] == target:
+          return mid
+        else if arr[mid] < target:
+          low <- mid + 1
+        else:
+          high <- mid - 1
+      return -1
+
+  chart "Mid Trace":
+    source = BinarySearch.trace
+    type = line
+    x = step
+    y = mid
+    xlabel = "step"
+    ylabel = "mid"
+
+  table "Trace Table":
+    rows = BinarySearch.trace
+
+  export chart = "Mid Trace"
+  export pseudo = "Binary Search"
+  export table = "Trace Table"
+  export trace = BinarySearch.trace
+
+component search = SearchModule(arr=[1, 3, 5, 7, 9, 11, 13], target=9)
+
+flow "Binary Search Explanation":
+  node a type=start label="Input array + target"
+  node b type=process label="Run algorithm"
+  node c type=decision label="Target found?"
+  node d type=end label="Return index"
+  node e type=end label="Return -1"
+
+  a -> b
+  b -> c
+  c -> d label="yes"
+  c -> e label="no"
+
+  embed b.right = search.chart
+  embed b.bottom = search.pseudo
+
+page "Search Report":
+  layout = grid(columns=2, rows=2, gap=16)
+  place search.chart at cell(1, 1)
+  place search.table at cell(1, 2)
+  place "Binary Search Explanation" at cell(2, 1..2)
+```
+
+---
+
+## 28. CLI behavior
+
+Recommended CLI:
+
+```bash
+graphscript check demo.gs
+graphscript run demo.gs
+graphscript render demo.gs -o out/
+graphscript export-ir demo.gs -o out/ir.json
+graphscript fmt demo.gs
+```
+
+Recommended subcommands:
+
+- `check`
+- `run`
+- `render`
+- `fmt`
+- `lsp`
+- `new`
+- `export-ir`
+
+---
+
+## 29. File conventions
+
+Recommended file conventions:
+
+- one main module per file
+- reuse shared themes/components through imports
+- examples under `examples/`
+- plugin/provider modules under `modules/`
+
+Recommended naming:
+
+- file names: `kebab-case.gs`
+- component names: `PascalCase`
+- variables: `snake_case`
+- chart/page titles: human-readable strings
+
+---
+
+## 30. Formatting rules
+
+To keep the language easy to use, the formatter should enforce:
+
+- 2-space indentation
+- one blank line between top-level blocks
+- aligned map values when practical
+- consistent quote style per file
+- stable ordering of imports and `use`
+
+---
+
+## 31. Extension system
+
+### 31.1 Plugin model
+
+A plugin may provide:
+
+- new block types
+- new functions
+- new renderers
+- new icon packs
+- new validators
+- new provider domains
+
+### 31.2 Candidate official plugins
+
+- `infra.aws`
+- `infra.k8s`
+- `quantum`
+- `signal`
+- `ml`
+- `network`
+- `timeline`
+
+---
+
+## 32. Future versions
+
+### v0.1
+
+- core syntax
+- data/functions
+- chart
+- flow
+- pseudo
+- algo + trace
+- table
+- page
+- sub/embed
+- svg/png/html export
+
+### v0.2
+
+- ERD
+- infra generic + AWS
+- improved layout engine
+- formatter + LSP
+
+### v0.3
+
+- plot3d
+- scene3d
+- glb/json export
+- animation primitives
+
+### v0.4
+
+- plugin SDK
+- interactive HTML renderer
+- richer domain packs
+
+---
+
+## 33. Project naming recommendation
+
+Use this identity:
+
+### Product name
+**GraphScript**
+
+### Tagline
+**Composable Visual Scripting for Charts, Diagrams, Algorithms, and 3D**
+
+### Internal technical name
+**GScript**
+
+### CLI name
+**graphscript**
+
+### File extension
+**.gs**
+
+This naming fits your existing repository name and keeps the project easy to discover and remember.
+
+---
+
+## 34. Final language promise
+
+GraphScript should let users do this in one ecosystem:
+
+- describe data
+- run algorithms
+- capture traces
+- draw charts
+- explain with flowcharts
+- build tables and infographics
+- model databases
+- draw infrastructure
+- render 3D plots and 3D scenes
+- compose everything as reusable `sub` modules
+
+That is the defining promise of the language.
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: src\ast\types.ts
+────────────────────────────────────────────────────────────────────────────────
+export interface SourceLocation {
+  start: Position;
+  end: Position;
+}
+
+export interface Position {
+  line: number;
+  column: number;
+  offset: number;
+}
+
+export type TokenType =
+  | 'IDENTIFIER'
+  | 'STRING'
+  | 'NUMBER'
+  | 'BOOLEAN'
+  | 'NULL'
+  | 'LBRACKET'
+  | 'RBRACKET'
+  | 'LPAREN'
+  | 'RPAREN'
+  | 'LBRACE'
+  | 'RBRACE'
+  | 'COLON'
+  | 'COMMA'
+  | 'PIPE'
+  | 'ARROW'
+  | 'EQUALS'
+  | 'OPERATOR'
+  | 'COMMENT'
+  | 'NEWLINE'
+  | 'INDENT'
+  | 'DEDENT'
+  | 'PERIOD'
+  | 'EOF';
+
+export interface Token {
+  type: TokenType;
+  value: string;
+  location: SourceLocation;
+}
+
+export interface Program {
+  type: 'Program';
+  body: TopLevelNode[];
+  location: SourceLocation;
+}
+
+export type TopLevelNode =
+  | UseStatement
+  | ImportStatement
+  | ConstDeclaration
+  | DataDeclaration
+  | FuncDeclaration
+  | ThemeDeclaration
+  | StyleDeclaration
+  | SubDeclaration
+  | ComponentDeclaration
+  | AlgoDeclaration
+  | PseudoDeclaration
+  | ChartDeclaration
+  | FlowDeclaration
+  | DiagramDeclaration
+  | TableDeclaration
+  | Plot3dDeclaration
+  | Scene3dDeclaration
+  | ErdDeclaration
+  | InfraDeclaration
+  | PageDeclaration
+  | RenderDeclaration;
+
+export interface UseStatement {
+  type: 'UseStatement';
+  module: string;
+  location: SourceLocation;
+}
+
+export interface ImportStatement {
+  type: 'ImportStatement';
+  path: string;
+  location: SourceLocation;
+}
+
+export interface ConstDeclaration {
+  type: 'ConstDeclaration';
+  name: string;
+  value: Expression;
+  location: SourceLocation;
+}
+
+export interface DataDeclaration {
+  type: 'DataDeclaration';
+  bindings: Binding[];
+  location: SourceLocation;
+}
+
+export interface Binding {
+  name: string;
+  value: Expression;
+}
+
+export interface FuncDeclaration {
+  type: 'FuncDeclaration';
+  name: string;
+  params: string[];
+  body: Statement[];
+  location: SourceLocation;
+}
+
+export interface ThemeDeclaration {
+  type: 'ThemeDeclaration';
+  name: string;
+  properties: Record<string, Expression>;
+  location: SourceLocation;
+}
+
+export interface StyleDeclaration {
+  type: 'StyleDeclaration';
+  name: string;
+  properties: Record<string, Expression>;
+  location: SourceLocation;
+}
+
+export interface SubDeclaration {
+  type: 'SubDeclaration';
+  name: string;
+  params: string[];
+  body: TopLevelNode[];
+  location: SourceLocation;
+}
+
+export interface ComponentDeclaration {
+  type: 'ComponentDeclaration';
+  name: string;
+  module: string;
+  args: Record<string, Expression>;
+  location: SourceLocation;
+}
+
+export interface AlgoDeclaration {
+  type: 'AlgoDeclaration';
+  name: string;
+  params: string[];
+  body: Statement[];
+  location: SourceLocation;
+}
+
+export interface PseudoDeclaration {
+  type: 'PseudoDeclaration';
+  name: string;
+  lines: string[];
+  location: SourceLocation;
+}
+
+export interface ChartDeclaration {
+  type: 'ChartDeclaration';
+  name: string;
+  properties: Record<string, Expression>;
+  location: SourceLocation;
+}
+
+export interface FlowDeclaration {
+  type: 'FlowDeclaration';
+  name: string;
+  properties: Record<string, Expression>;
+  nodes: FlowNode[];
+  edges: FlowEdge[];
+  location: SourceLocation;
+}
+
+export interface FlowNode {
+  type: 'FlowNode';
+  id: string;
+  nodeType?: string;
+  label?: string;
+}
+
+export interface FlowEdge {
+  type: 'FlowEdge';
+  from: string;
+  to: string;
+  label?: string;
+}
+
+export interface DiagramDeclaration {
+  type: 'DiagramDeclaration';
+  name: string;
+  elements: DiagramElement[];
+  location: SourceLocation;
+}
+
+export interface DiagramElement {
+  type: string;
+  name: string;
+  properties: Record<string, Expression>;
+}
+
+export interface TableDeclaration {
+  type: 'TableDeclaration';
+  name: string;
+  columns?: string[];
+  rows?: Expression;
+  properties: Record<string, Expression>;
+  location: SourceLocation;
+}
+
+export interface Plot3dDeclaration {
+  type: 'Plot3dDeclaration';
+  name: string;
+  properties: Record<string, Expression>;
+  location: SourceLocation;
+}
+
+export interface Scene3dDeclaration {
+  type: 'Scene3dDeclaration';
+  name: string;
+  elements: Scene3dElement[];
+  location: SourceLocation;
+}
+
+export interface Scene3dElement {
+  type: string;
+  name: string;
+}
+
+export interface ErdDeclaration {
+  type: 'ErdDeclaration';
+  name: string;
+  tables: ErdTable[];
+  relationships: ErdRelationship[];
+  location: SourceLocation;
+}
+
+export interface ErdTable {
+  name: string;
+  fields: ErdField[];
+}
+
+export interface ErdField {
+  name: string;
+  fieldType: string;
+  constraints: string[];
+}
+
+export interface ErdRelationship {
+  from: string;
+  to: string;
+  cardinality: string;
+}
+
+export interface InfraDeclaration {
+  type: 'InfraDeclaration';
+  provider: string;
+  name: string;
+  elements: InfraElement[];
+  location: SourceLocation;
+}
+
+export interface InfraElement {
+  type: string;
+  name: string;
+}
+
+export interface PageDeclaration {
+  type: 'PageDeclaration';
+  name: string;
+  properties: Record<string, Expression>;
+  placements: PagePlacement[];
+  location: SourceLocation;
+}
+
+export interface PagePlacement {
+  target: string;
+  position: string;
+}
+
+export interface RenderDeclaration {
+  type: 'RenderDeclaration';
+  targets: RenderTarget[];
+  location: SourceLocation;
+}
+
+export interface RenderTarget {
+  kind: string;
+  name: string;
+  output: string;
+}
+
+export type Expression =
+  | Identifier
+  | Literal
+  | ArrayExpression
+  | ObjectExpression
+  | BinaryExpression
+  | UnaryExpression
+  | CallExpression
+  | MemberExpression
+  | IndexExpression
+  | ConditionalExpression;
+
+export interface Identifier {
+  type: 'Identifier';
+  name: string;
+  location: SourceLocation;
+}
+
+export interface Literal {
+  type: 'Literal';
+  value: string | number | boolean | null;
+  location: SourceLocation;
+}
+
+export interface ArrayExpression {
+  type: 'ArrayExpression';
+  elements: Expression[];
+  location: SourceLocation;
+}
+
+export interface ObjectExpression {
+  type: 'ObjectExpression';
+  properties: { key: string; value: Expression }[];
+  location: SourceLocation;
+}
+
+export interface BinaryExpression {
+  type: 'BinaryExpression';
+  operator: string;
+  left: Expression;
+  right: Expression;
+  location: SourceLocation;
+}
+
+export interface UnaryExpression {
+  type: 'UnaryExpression';
+  operator: string;
+  operand: Expression;
+  location: SourceLocation;
+}
+
+export interface CallExpression {
+  type: 'CallExpression';
+  callee: Expression | string;
+  args: Expression[];
+  location: SourceLocation;
+}
+
+export interface MemberExpression {
+  type: 'MemberExpression';
+  object: Expression;
+  property: string;
+  location: SourceLocation;
+}
+
+export interface IndexExpression {
+  type: 'IndexExpression';
+  object: Expression;
+  index: Expression;
+  location: SourceLocation;
+}
+
+export interface ConditionalExpression {
+  type: 'ConditionalExpression';
+  test: Expression;
+  consequent: Expression;
+  alternate: Expression;
+  location: SourceLocation;
+}
+
+export type Statement =
+  | ExpressionStatement
+  | AssignmentStatement
+  | IfStatement
+  | WhileStatement
+  | ForStatement
+  | ReturnStatement
+  | BreakStatement
+  | ContinueStatement
+  | EmitStatement;
+
+export interface ExpressionStatement {
+  type: 'ExpressionStatement';
+  expression: Expression;
+  location: SourceLocation;
+}
+
+export interface AssignmentStatement {
+  type: 'AssignmentStatement';
+  target: string;
+  value: Expression;
+  location: SourceLocation;
+}
+
+export interface IfStatement {
+  type: 'IfStatement';
+  condition: Expression;
+  thenBranch: Statement[];
+  elseIfBranches?: { condition: Expression; body: Statement[] }[];
+  elseBranch?: Statement[];
+  location: SourceLocation;
+}
+
+export interface WhileStatement {
+  type: 'WhileStatement';
+  condition: Expression;
+  body: Statement[];
+  location: SourceLocation;
+}
+
+export interface ForStatement {
+  type: 'ForStatement';
+  variable: string;
+  iterable: Expression;
+  body: Statement[];
+  location: SourceLocation;
+}
+
+export interface ReturnStatement {
+  type: 'ReturnStatement';
+  value?: Expression;
+  location: SourceLocation;
+}
+
+export interface BreakStatement {
+  type: 'BreakStatement';
+  location: SourceLocation;
+}
+
+export interface ContinueStatement {
+  type: 'ContinueStatement';
+  location: SourceLocation;
+}
+
+export interface EmitStatement {
+  type: 'EmitStatement';
+  fields: { name: string; value: Expression }[];
+  location: SourceLocation;
+}
+
+export const TOP_LEVEL_KEYWORDS = [
+  'use', 'import', 'const', 'data', 'func', 'theme', 'style', 'sub',
+  'component', 'algo', 'pseudo', 'chart', 'flow', 'diagram', 'table', 'plot3d',
+  'scene3d', 'erd', 'infra', 'page', 'render'
+] as const;
+
+export const STATEMENT_KEYWORDS = [
+  'if', 'else', 'while', 'for', 'return', 'break', 'continue', 'emit'
+] as const;
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: src\cli.ts
+────────────────────────────────────────────────────────────────────────────────
+#!/usr/bin/env node
+
+import * as fs from 'fs';
+import { Parser } from './parser';
+import { Evaluator } from './runtime';
+import { Renderer } from './renderer';
+
+interface CliOptions {
+  command: 'check' | 'run' | 'render';
+  file: string;
+  outputDir?: string;
+}
+
+function parseArgs(args: string[]): CliOptions | null {
+  const [command, file, ...rest] = args;
+  if (!command || !file) return null;
+  if (!['check', 'run', 'render'].includes(command)) return null;
+
+  let outputDir: string | undefined;
+  for (let i = 0; i < rest.length; i += 1) {
+    if (rest[i] === '--output' || rest[i] === '-o') {
+      outputDir = rest[i + 1];
+      i += 1;
+    }
+  }
+
+  return { command: command as CliOptions['command'], file, outputDir };
+}
+
+function printUsage(): void {
+  console.log(`
+GraphScript CLI - Composable Visual Scripting Language
+
+Usage:
+  graphscript <command> <file> [options]
+
+Commands:
+  check <file.gs>     Parse and validate the file
+  run <file.gs>       Run algorithms and display traces
+  render <file.gs>    Render charts and flows to SVG
+
+Options:
+  --output <dir>      Output directory for render command (default: ./output)
+`);
+}
+
+function main(args: string[]): void {
+  const options = parseArgs(args);
+  if (!options) {
+    printUsage();
+    process.exit(1);
+  }
+  if (!fs.existsSync(options.file)) {
+    console.error(`Error: File not found: ${options.file}`);
+    process.exit(1);
+  }
+
+  const source = fs.readFileSync(options.file, 'utf-8');
+  try {
+    const parser = new Parser();
+    const program = parser.parse(source);
+    console.log('Parse: OK');
+
+    if (options.command === 'check') {
+      console.log('Validation: OK');
+      return;
+    }
+
+    const evaluator = new Evaluator();
+    const values = evaluator.execute(program);
+    console.log('Execution: OK');
+
+    if (options.command === 'run') {
+      const traces = evaluator.getTraces();
+      if (traces.size === 0) console.log('\nNo algorithm traces found.');
+      for (const [name, trace] of traces.entries()) {
+        if (!trace.rows.length) continue;
+        console.log(`\nTrace: ${name}`);
+        console.log(trace.columns.join('\t'));
+        for (const row of trace.rows) {
+          console.log(trace.columns.map((column) => String(row[column] ?? '')).join('\t'));
+        }
+      }
+      return;
+    }
+
+    const renderer = new Renderer({ outputDir: options.outputDir || './output' });
+    console.log('\nRendering...');
+    renderer.render(values, evaluator.getTraces(), { outputDir: options.outputDir || './output' });
+    console.log('Render: Complete');
+  } catch (error: any) {
+    console.error(`\nError: ${error.message}`);
+    process.exit(1);
+  }
+}
+
+main(process.argv.slice(2));
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: src\parser\expressions.ts
+────────────────────────────────────────────────────────────────────────────────
+import { Token, Expression, Position } from '../ast/types';
+
+export class ExpressionParser {
+  constructor(
+    private tokens: Token[],
+    private pos: number,
+    private peek: () => Token,
+    private advance: () => Token,
+    private check: (type: string, value?: string) => boolean,
+    private loc: () => Position
+  ) {}
+
+  parseExpression(): Expression {
+    return this.parseConditional();
+  }
+
+  private parseConditional(): Expression {
+    const start = this.loc();
+    const test = this.parseOr();
+
+    if (this.check('OPERATOR', '?')) {
+      this.advance();
+      const consequent = this.parseExpression();
+      this.expect('COLON');
+      const alternate = this.parseExpression();
+      return {
+        type: 'ConditionalExpression',
+        test,
+        consequent,
+        alternate,
+        location: { start, end: this.loc() },
+      };
+    }
+
+    return test;
+  }
+
+  private parseOr(): Expression {
+    let left = this.parseAnd();
+    while (this.check('OPERATOR', '||') || this.check('IDENTIFIER', 'or')) {
+      const operator = this.advance().value === 'or' ? '||' : '||';
+      const right = this.parseAnd();
+      left = {
+        type: 'BinaryExpression',
+        operator,
+        left,
+        right,
+        location: { start: left.location.start, end: this.loc() },
+      };
+    }
+    return left;
+  }
+
+  private parseAnd(): Expression {
+    let left = this.parseEquality();
+    while (this.check('OPERATOR', '&&') || this.check('IDENTIFIER', 'and')) {
+      this.advance();
+      const right = this.parseEquality();
+      left = {
+        type: 'BinaryExpression',
+        operator: '&&',
+        left,
+        right,
+        location: { start: left.location.start, end: this.loc() },
+      };
+    }
+    return left;
+  }
+
+  private parseEquality(): Expression {
+    let left = this.parseComparison();
+    while (this.check('OPERATOR', '==') || this.check('OPERATOR', '!=')) {
+      const operator = this.advance().value;
+      const right = this.parseComparison();
+      left = {
+        type: 'BinaryExpression',
+        operator,
+        left,
+        right,
+        location: { start: left.location.start, end: this.loc() },
+      };
+    }
+    return left;
+  }
+
+  private parseComparison(): Expression {
+    let left = this.parseTerm();
+    while (
+      this.check('OPERATOR', '<') ||
+      this.check('OPERATOR', '>') ||
+      this.check('OPERATOR', '<=') ||
+      this.check('OPERATOR', '>=')
+    ) {
+      const operator = this.advance().value;
+      const right = this.parseTerm();
+      left = {
+        type: 'BinaryExpression',
+        operator,
+        left,
+        right,
+        location: { start: left.location.start, end: this.loc() },
+      };
+    }
+    return left;
+  }
+
+  private parseTerm(): Expression {
+    let left = this.parseFactor();
+    while (this.check('OPERATOR', '+') || this.check('OPERATOR', '-')) {
+      const operator = this.advance().value;
+      const right = this.parseFactor();
+      left = {
+        type: 'BinaryExpression',
+        operator,
+        left,
+        right,
+        location: { start: left.location.start, end: this.loc() },
+      };
+    }
+    return left;
+  }
+
+  private parseFactor(): Expression {
+    let left = this.parseUnary();
+    while (this.check('OPERATOR', '*') || this.check('OPERATOR', '/') || this.check('OPERATOR', '%')) {
+      const operator = this.advance().value;
+      const right = this.parseUnary();
+      left = {
+        type: 'BinaryExpression',
+        operator,
+        left,
+        right,
+        location: { start: left.location.start, end: this.loc() },
+      };
+    }
+    return left;
+  }
+
+  private parseUnary(): Expression {
+    if (this.check('OPERATOR', '-') || this.check('IDENTIFIER', 'not')) {
+      const start = this.loc();
+      const operator = this.advance().value;
+      const operand = this.parseUnary();
+      return {
+        type: 'UnaryExpression',
+        operator,
+        operand,
+        location: { start, end: this.loc() },
+      };
+    }
+    return this.parsePower();
+  }
+
+  private parsePower(): Expression {
+    let left = this.parsePostfix();
+    while (this.check('OPERATOR', '^')) {
+      this.advance();
+      const right = this.parseUnary();
+      left = {
+        type: 'BinaryExpression',
+        operator: '^',
+        left,
+        right,
+        location: { start: left.location.start, end: this.loc() },
+      };
+    }
+    return left;
+  }
+
+  private parsePostfix(): Expression {
+    let expr = this.parsePrimary();
+
+    while (true) {
+      if (this.check('LPAREN')) {
+        const start = expr.location.start;
+        this.advance();
+        const args: Expression[] = [];
+        while (!this.check('RPAREN') && !this.check('EOF')) {
+          if (args.length > 0) this.expect('COMMA');
+          args.push(this.parseExpression());
+        }
+        this.expect('RPAREN');
+        expr = {
+          type: 'CallExpression',
+          callee: expr,
+          args,
+          location: { start, end: this.loc() },
+        };
+        continue;
+      }
+
+      if (this.check('LBRACKET')) {
+        const start = expr.location.start;
+        this.advance();
+        const index = this.parseExpression();
+        this.expect('RBRACKET');
+        expr = {
+          type: 'IndexExpression',
+          object: expr,
+          index,
+          location: { start, end: this.loc() },
+        };
+        continue;
+      }
+
+      if (this.check('PERIOD')) {
+        const start = expr.location.start;
+        this.advance();
+        const property = this.expect('IDENTIFIER').value;
+        expr = {
+          type: 'MemberExpression',
+          object: expr,
+          property,
+          location: { start, end: this.loc() },
+        };
+        continue;
+      }
+
+      break;
+    }
+
+    return expr;
+  }
+
+  private parsePrimary(): Expression {
+    const token = this.peek();
+    const start = token.location.start;
+
+    if (this.check('NUMBER')) {
+      this.advance();
+      return { type: 'Literal', value: Number(token.value), location: { start, end: this.loc() } };
+    }
+
+    if (this.check('STRING')) {
+      this.advance();
+      return { type: 'Literal', value: token.value, location: { start, end: this.loc() } };
+    }
+
+    if (this.check('BOOLEAN')) {
+      this.advance();
+      return { type: 'Literal', value: token.value === 'true', location: { start, end: this.loc() } };
+    }
+
+    if (this.check('NULL')) {
+      this.advance();
+      return { type: 'Literal', value: null, location: { start, end: this.loc() } };
+    }
+
+    if (this.check('LPAREN')) {
+      this.advance();
+      const expr = this.parseExpression();
+      this.expect('RPAREN');
+      return expr;
+    }
+
+    if (this.check('LBRACKET')) {
+      this.advance();
+      const elements: Expression[] = [];
+      while (!this.check('RBRACKET') && !this.check('EOF')) {
+        if (elements.length > 0) this.expect('COMMA');
+        elements.push(this.parseExpression());
+      }
+      this.expect('RBRACKET');
+      return { type: 'ArrayExpression', elements, location: { start, end: this.loc() } };
+    }
+
+    if (this.check('LBRACE')) {
+      this.advance();
+      const properties: { key: string; value: Expression }[] = [];
+      while (!this.check('RBRACE') && !this.check('EOF')) {
+        if (properties.length > 0) this.expect('COMMA');
+        const keyToken = this.peek();
+        if (!this.check('IDENTIFIER') && !this.check('STRING')) {
+          throw new Error(`Expected object key, got ${keyToken.type}`);
+        }
+        this.advance();
+        this.expect('COLON');
+        const value = this.parseExpression();
+        properties.push({ key: keyToken.value, value });
+      }
+      this.expect('RBRACE');
+      return { type: 'ObjectExpression', properties, location: { start, end: this.loc() } };
+    }
+
+    if (this.check('IDENTIFIER')) {
+      this.advance();
+      return { type: 'Identifier', name: token.value, location: { start, end: this.loc() } };
+    }
+
+    throw new Error(`Unexpected token ${token.type} (${token.value})`);
+  }
+
+  private expect(type: string, value?: string): Token {
+    const token = this.peek();
+    if (token.type !== type || (value !== undefined && token.value !== value)) {
+      throw new Error(`Expected ${value ? `${type} '${value}'` : type}, got ${token.type} (${token.value})`);
+    }
+    return this.advance();
+  }
+}
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: src\parser\index.ts
+────────────────────────────────────────────────────────────────────────────────
+import {
+  AlgoDeclaration,
+  Binding,
+  ChartDeclaration,
+  ComponentDeclaration,
+  ConstDeclaration,
+  DataDeclaration,
+  DiagramDeclaration,
+  Expression,
+  FlowDeclaration,
+  FlowEdge,
+  FlowNode,
+  FuncDeclaration,
+  IfStatement,
+  ImportStatement,
+  PageDeclaration,
+  Plot3dDeclaration,
+  Position,
+  Program,
+  PseudoDeclaration,
+  RenderDeclaration,
+  RenderTarget,
+  Scene3dDeclaration,
+  SourceLocation,
+  Statement,
+  StyleDeclaration,
+  SubDeclaration,
+  TableDeclaration,
+  ThemeDeclaration,
+  TopLevelNode,
+  UseStatement,
+} from '../ast/types';
+import { Tokenizer } from '../tokenizer';
+import { ExpressionParser } from './expressions';
+
+interface LineInfo {
+  raw: string;
+  text: string;
+  indent: number;
+  line: number;
+}
+
+export class Parser {
+  private lines: LineInfo[] = [];
+  private index = 0;
+
+  parse(source: string): Program {
+    this.lines = source.replace(/\r\n/g, '\n').split('\n').map((raw, idx) => ({
+      raw,
+      text: raw.trim(),
+      indent: raw.match(/^ */)?.[0].length ?? 0,
+      line: idx + 1,
+    }));
+    this.index = 0;
+
+    const start = this.makePos(1, 1, 0);
+    const body = this.parseTopLevelBlock(0);
+    const endLine = this.lines[this.lines.length - 1]?.line ?? 1;
+    return { type: 'Program', body, location: { start, end: this.makePos(endLine, 1, 0) } };
+  }
+
+  private parseTopLevelBlock(indent: number): TopLevelNode[] {
+    const nodes: TopLevelNode[] = [];
+    while (!this.eof()) {
+      const line = this.peekMeaningful();
+      if (!line) break;
+      if (line.indent < indent) break;
+      if (line.indent > indent) {
+        this.index += 1;
+        continue;
+      }
+      nodes.push(this.parseTopLevel(line));
+    }
+    return nodes;
+  }
+
+  private parseTopLevel(line: LineInfo): TopLevelNode {
+    const text = line.text;
+
+    if (text.startsWith('use ')) return this.parseUse(line);
+    if (text.startsWith('import ')) return this.parseImport(line);
+    if (text.startsWith('const ')) return this.parseConst(line);
+    if (text === 'data:') return this.parseData(line);
+    if (text.startsWith('func ')) return this.parseFunc(line);
+    if (text.startsWith('theme ')) return this.parseTheme(line);
+    if (text.startsWith('style ')) return this.parseStyle(line);
+    if (text.startsWith('sub ')) return this.parseSub(line);
+    if (text.startsWith('component ')) return this.parseComponent(line);
+    if (text.startsWith('algo ')) return this.parseAlgo(line);
+    if (text.startsWith('pseudo ')) return this.parsePseudo(line);
+    if (text.startsWith('chart ')) return this.parseChart(line);
+    if (text.startsWith('flow ')) return this.parseFlow(line);
+    if (text.startsWith('diagram ')) return this.parseDiagram(line);
+    if (text.startsWith('table ')) return this.parseTable(line);
+    if (text.startsWith('plot3d ')) return this.parsePlot3d(line);
+    if (text.startsWith('scene3d ')) return this.parseScene3d(line);
+    if (text.startsWith('page ')) return this.parsePage(line);
+    if (text === 'render:') return this.parseRender(line);
+
+    throw new Error(`Unsupported top-level declaration at line ${line.line}: ${line.text}`);
+  }
+
+  private parseUse(line: LineInfo): UseStatement {
+    this.index += 1;
+    return { type: 'UseStatement', module: line.text.slice(4).trim(), location: this.lineLoc(line) };
+  }
+
+  private parseImport(line: LineInfo): ImportStatement {
+    this.index += 1;
+    const m = line.text.match(/^import\s+['"](.+?)['"]$/);
+    if (!m) throw new Error(`Invalid import at line ${line.line}`);
+    return { type: 'ImportStatement', path: m[1], location: this.lineLoc(line) };
+  }
+
+  private parseConst(line: LineInfo): ConstDeclaration {
+    this.index += 1;
+    const m = line.text.match(/^const\s+([A-Za-z_][\w]*)\s*=\s*(.+)$/);
+    if (!m) throw new Error(`Invalid const declaration at line ${line.line}`);
+    return {
+      type: 'ConstDeclaration',
+      name: m[1],
+      value: this.parseExpressionText(m[2], line.line),
+      location: this.lineLoc(line),
+    };
+  }
+
+  private parseData(line: LineInfo): DataDeclaration {
+    this.index += 1;
+    const childIndent = this.nextChildIndent(line.indent);
+    const bindings: Binding[] = [];
+    if (childIndent === null) {
+      return { type: 'DataDeclaration', bindings, location: this.lineLoc(line) };
+    }
+
+    while (!this.eof()) {
+      const current = this.peekMeaningful();
+      if (!current || current.indent < childIndent) break;
+      if (current.indent > childIndent) {
+        this.index += 1;
+        continue;
+      }
+      const m = current.text.match(/^([A-Za-z_][\w]*)\s*=\s*(.+)$/);
+      if (!m) throw new Error(`Invalid data binding at line ${current.line}`);
+      bindings.push({ name: m[1], value: this.parseExpressionText(m[2], current.line) });
+      this.index += 1;
+    }
+
+    return { type: 'DataDeclaration', bindings, location: this.lineLoc(line) };
+  }
+
+  private parseFunc(line: LineInfo): FuncDeclaration {
+    const { name, params } = this.parseHeaderWithParams(line, 'func');
+    this.index += 1;
+    const body = this.parseStatementSuite(line.indent);
+    return { type: 'FuncDeclaration', name, params, body, location: this.lineLoc(line) };
+  }
+
+  private parseAlgo(line: LineInfo): AlgoDeclaration {
+    const { name, params } = this.parseHeaderWithParams(line, 'algo');
+    this.index += 1;
+    const body = this.parseStatementSuite(line.indent);
+    return { type: 'AlgoDeclaration', name, params, body, location: this.lineLoc(line) };
+  }
+
+  private parseTheme(line: LineInfo): ThemeDeclaration {
+    this.index += 1;
+    const name = line.text.slice(6, -1).trim();
+    return { type: 'ThemeDeclaration', name, properties: this.parsePropertyBlock(line.indent), location: this.lineLoc(line) };
+  }
+
+  private parseStyle(line: LineInfo): StyleDeclaration {
+    this.index += 1;
+    const name = line.text.slice(6, -1).trim();
+    return { type: 'StyleDeclaration', name, properties: this.parsePropertyBlock(line.indent), location: this.lineLoc(line) };
+  }
+
+  private parseSub(line: LineInfo): SubDeclaration {
+    const { name, params } = this.parseHeaderWithParams(line, 'sub');
+    this.index += 1;
+    const childIndent = this.nextChildIndent(line.indent);
+    const body = childIndent === null ? [] : this.parseTopLevelBlock(childIndent);
+    return { type: 'SubDeclaration', name, params, body, location: this.lineLoc(line) };
+  }
+
+  private parseComponent(line: LineInfo): ComponentDeclaration {
+    this.index += 1;
+    const m = line.text.match(/^component\s+([A-Za-z_][\w]*)\s*=\s*([A-Za-z_][\w]*)\((.*)\)$/);
+    if (!m) throw new Error(`Invalid component declaration at line ${line.line}`);
+    const [, name, module, rawArgs] = m;
+    const args: Record<string, Expression> = {};
+    for (const part of this.splitCommaArgs(rawArgs)) {
+      if (!part.trim()) continue;
+      const argMatch = part.match(/^([A-Za-z_][\w]*)\s*=\s*(.+)$/);
+      if (!argMatch) continue;
+      args[argMatch[1]] = this.parseExpressionText(argMatch[2], line.line);
+    }
+    return { type: 'ComponentDeclaration', name, module, args, location: this.lineLoc(line) };
+  }
+
+  private parsePseudo(line: LineInfo): PseudoDeclaration {
+    this.index += 1;
+    const name = this.parseTitledBlockName(line.text.slice('pseudo'.length).trim(), line.line);
+    const childIndent = this.nextChildIndent(line.indent);
+    const lines: string[] = [];
+    if (childIndent !== null) {
+      while (!this.eof()) {
+        const current = this.peekMeaningful();
+        if (!current || current.indent < childIndent) break;
+        lines.push(current.raw.slice(childIndent));
+        this.index += 1;
+      }
+    }
+    return { type: 'PseudoDeclaration', name, lines, location: this.lineLoc(line) };
+  }
+
+  private parseChart(line: LineInfo): ChartDeclaration {
+    this.index += 1;
+    const name = this.parseTitledBlockName(line.text.slice('chart'.length).trim(), line.line);
+    return { type: 'ChartDeclaration', name, properties: this.parsePropertyBlock(line.indent), location: this.lineLoc(line) };
+  }
+
+  private parseFlow(line: LineInfo): FlowDeclaration {
+    this.index += 1;
+    const name = this.parseTitledBlockName(line.text.slice('flow'.length).trim(), line.line);
+    const childIndent = this.nextChildIndent(line.indent);
+    const properties: Record<string, Expression> = {};
+    const nodes: FlowNode[] = [];
+    const edges: FlowEdge[] = [];
+
+    if (childIndent !== null) {
+      while (!this.eof()) {
+        const current = this.peekMeaningful();
+        if (!current || current.indent < childIndent) break;
+        if (current.indent > childIndent) {
+          this.index += 1;
+          continue;
+        }
+
+        if (current.text.startsWith('node ')) {
+          const m = current.text.match(/^node\s+([A-Za-z_][\w]*)\s*(.*)$/);
+          if (!m) throw new Error(`Invalid flow node at line ${current.line}`);
+          const attrs = this.parseSimpleAttributes(m[2]);
+          nodes.push({
+            type: 'FlowNode',
+            id: m[1],
+            nodeType: attrs.type,
+            label: attrs.label,
+          });
+          this.index += 1;
+          continue;
+        }
+
+        if (current.text.includes('->')) {
+          const m = current.text.match(/^([A-Za-z_][\w]*)\s*->\s*([A-Za-z_][\w]*)(?:\s+label\s*=\s*(.+))?$/);
+          if (!m) throw new Error(`Invalid flow edge at line ${current.line}`);
+          edges.push({
+            type: 'FlowEdge',
+            from: m[1],
+            to: m[2],
+            label: m[3] ? this.parseInlineString(m[3].trim()) : undefined,
+          });
+          this.index += 1;
+          continue;
+        }
+
+        const prop = current.text.match(/^([A-Za-z_][\w]*)\s*=\s*(.+)$/);
+        if (prop) {
+          properties[prop[1]] = this.parseExpressionText(prop[2], current.line);
+        }
+        this.index += 1;
+      }
+    }
+
+    return { type: 'FlowDeclaration', name, properties, nodes, edges, location: this.lineLoc(line) };
+  }
+
+  private parseDiagram(line: LineInfo): DiagramDeclaration {
+    this.index += 1;
+    const name = this.parseTitledBlockName(line.text.slice('diagram'.length).trim(), line.line);
+    return { type: 'DiagramDeclaration', name, elements: [], location: this.lineLoc(line) };
+  }
+
+  private parseTable(line: LineInfo): TableDeclaration {
+    this.index += 1;
+    const name = this.parseTitledBlockName(line.text.slice('table'.length).trim(), line.line);
+    return { type: 'TableDeclaration', name, properties: this.parsePropertyBlock(line.indent), location: this.lineLoc(line) };
+  }
+
+  private parsePlot3d(line: LineInfo): Plot3dDeclaration {
+    this.index += 1;
+    const name = this.parseTitledBlockName(line.text.slice('plot3d'.length).trim(), line.line);
+    return { type: 'Plot3dDeclaration', name, properties: this.parsePropertyBlock(line.indent), location: this.lineLoc(line) };
+  }
+
+  private parseScene3d(line: LineInfo): Scene3dDeclaration {
+    this.index += 1;
+    const name = this.parseTitledBlockName(line.text.slice('scene3d'.length).trim(), line.line);
+    return { type: 'Scene3dDeclaration', name, elements: [], location: this.lineLoc(line) };
+  }
+
+  private parsePage(line: LineInfo): PageDeclaration {
+    this.index += 1;
+    return {
+      type: 'PageDeclaration',
+      name: this.parseTitledBlockName(line.text.slice('page'.length).trim(), line.line),
+      properties: this.parsePropertyBlock(line.indent),
+      placements: [],
+      location: this.lineLoc(line),
+    };
+  }
+
+  private parseRender(line: LineInfo): RenderDeclaration {
+    this.index += 1;
+    const childIndent = this.nextChildIndent(line.indent);
+    const targets: RenderTarget[] = [];
+    if (childIndent !== null) {
+      while (!this.eof()) {
+        const current = this.peekMeaningful();
+        if (!current || current.indent < childIndent) break;
+        const m = current.text.match(/^target\s+([A-Za-z_][\w]*)\s+(.+?)\s+to\s+['"](.+?)['"]$/);
+        if (m) {
+          targets.push({ kind: m[1], name: this.parseInlineString(m[2].trim()), output: m[3] });
+        }
+        this.index += 1;
+      }
+    }
+    return { type: 'RenderDeclaration', targets, location: this.lineLoc(line) };
+  }
+
+  private parseStatementSuite(parentIndent: number): Statement[] {
+    const childIndent = this.nextChildIndent(parentIndent);
+    if (childIndent === null) return [];
+    return this.parseStatements(childIndent);
+  }
+
+  private parseStatements(indent: number): Statement[] {
+    const statements: Statement[] = [];
+
+    while (!this.eof()) {
+      const line = this.peekMeaningful();
+      if (!line) break;
+      if (line.indent < indent) break;
+      if (line.indent > indent) {
+        this.index += 1;
+        continue;
+      }
+      if (line.text.startsWith('else')) break;
+      statements.push(this.parseStatement(line, indent));
+    }
+
+    return statements;
+  }
+
+  private parseStatement(line: LineInfo, indent: number): Statement {
+    const text = line.text;
+
+    if (text.startsWith('if ') && text.endsWith(':')) return this.parseIfStatement(line, indent);
+    if (text.startsWith('while ') && text.endsWith(':')) return this.parseWhileStatement(line);
+    if (text.startsWith('for ') && text.endsWith(':')) return this.parseForStatement(line);
+    if (text === 'emit:') return this.parseEmitStatement(line);
+    if (text === 'break') {
+      this.index += 1;
+      return { type: 'BreakStatement', location: this.lineLoc(line) };
+    }
+    if (text === 'continue') {
+      this.index += 1;
+      return { type: 'ContinueStatement', location: this.lineLoc(line) };
+    }
+    if (text.startsWith('return')) {
+      this.index += 1;
+      const rest = text.slice('return'.length).trim();
+      return {
+        type: 'ReturnStatement',
+        value: rest ? this.parseExpressionText(rest, line.line) : undefined,
+        location: this.lineLoc(line),
+      };
+    }
+
+    const assign = text.match(/^([A-Za-z_][\w]*)\s*=\s*(.+)$/);
+    if (assign) {
+      this.index += 1;
+      return {
+        type: 'AssignmentStatement',
+        target: assign[1],
+        value: this.parseExpressionText(assign[2], line.line),
+        location: this.lineLoc(line),
+      };
+    }
+
+    this.index += 1;
+    const expression = this.parseExpressionText(text, line.line);
+    return { type: 'ExpressionStatement', expression, location: this.lineLoc(line) };
+  }
+
+  private parseIfStatement(line: LineInfo, indent: number): IfStatement {
+    const conditionText = line.text.slice(2, -1).trim();
+    this.index += 1;
+    const thenBranch = this.parseStatementSuite(indent);
+    const elseIfBranches: { condition: Expression; body: Statement[] }[] = [];
+    let elseBranch: Statement[] | undefined;
+
+    while (!this.eof()) {
+      const current = this.peekMeaningful();
+      if (!current || current.indent !== indent) break;
+      if (current.text.startsWith('else if ') && current.text.endsWith(':')) {
+        const condText = current.text.slice('else if'.length, -1).trim();
+        this.index += 1;
+        elseIfBranches.push({
+          condition: this.parseExpressionText(condText, current.line),
+          body: this.parseStatementSuite(indent),
+        });
+        continue;
+      }
+      if (current.text === 'else:') {
+        this.index += 1;
+        elseBranch = this.parseStatementSuite(indent);
+      }
+      break;
+    }
+
+    return {
+      type: 'IfStatement',
+      condition: this.parseExpressionText(conditionText, line.line),
+      thenBranch,
+      elseIfBranches,
+      elseBranch,
+      location: this.lineLoc(line),
+    };
+  }
+
+  private parseWhileStatement(line: LineInfo): Statement {
+    const conditionText = line.text.slice('while'.length, -1).trim();
+    this.index += 1;
+    return {
+      type: 'WhileStatement',
+      condition: this.parseExpressionText(conditionText, line.line),
+      body: this.parseStatementSuite(line.indent),
+      location: this.lineLoc(line),
+    };
+  }
+
+  private parseForStatement(line: LineInfo): Statement {
+    const m = line.text.match(/^for\s+([A-Za-z_][\w]*)\s+in\s+(.+):$/);
+    if (!m) throw new Error(`Invalid for statement at line ${line.line}`);
+    this.index += 1;
+    return {
+      type: 'ForStatement',
+      variable: m[1],
+      iterable: this.parseExpressionText(m[2], line.line),
+      body: this.parseStatementSuite(line.indent),
+      location: this.lineLoc(line),
+    };
+  }
+
+  private parseEmitStatement(line: LineInfo): Statement {
+    this.index += 1;
+    const childIndent = this.nextChildIndent(line.indent);
+    const fields: { name: string; value: Expression }[] = [];
+    if (childIndent !== null) {
+      while (!this.eof()) {
+        const current = this.peekMeaningful();
+        if (!current || current.indent < childIndent) break;
+        const m = current.text.match(/^([A-Za-z_][\w]*)\s*=\s*(.+)$/);
+        if (!m) throw new Error(`Invalid emit field at line ${current.line}`);
+        fields.push({ name: m[1], value: this.parseExpressionText(m[2], current.line) });
+        this.index += 1;
+      }
+    }
+    return { type: 'EmitStatement', fields, location: this.lineLoc(line) };
+  }
+
+  private parsePropertyBlock(parentIndent: number): Record<string, Expression> {
+    const childIndent = this.nextChildIndent(parentIndent);
+    const props: Record<string, Expression> = {};
+    if (childIndent === null) return props;
+
+    while (!this.eof()) {
+      const line = this.peekMeaningful();
+      if (!line || line.indent < childIndent) break;
+      if (line.indent > childIndent) {
+        this.index += 1;
+        continue;
+      }
+      const m = line.text.match(/^([A-Za-z_][\w]*)\s*=\s*(.+)$/);
+      if (m) props[m[1]] = this.parseExpressionText(m[2], line.line);
+      this.index += 1;
+    }
+
+    return props;
+  }
+
+  private parseHeaderWithParams(line: LineInfo, keyword: string): { name: string; params: string[] } {
+    const regex = new RegExp(`^${keyword}\\s+([A-Za-z_][\\w]*)\\((.*)\\):$`);
+    const m = line.text.match(regex);
+    if (!m) throw new Error(`Invalid ${keyword} declaration at line ${line.line}`);
+    return { name: m[1], params: this.splitCommaArgs(m[2]).map((p) => p.trim()).filter(Boolean) };
+  }
+
+  private parseExpressionText(text: string, lineNumber: number): Expression {
+    const tokenizer = new Tokenizer();
+    const tokens = tokenizer.tokenize(text);
+    let pos = 0;
+    const parser = new ExpressionParser(
+      tokens,
+      pos,
+      () => tokens[pos] ?? tokens[tokens.length - 1],
+      () => tokens[pos++] ?? tokens[tokens.length - 1],
+      (type, value) => {
+        const token = tokens[pos] ?? tokens[tokens.length - 1];
+        return token.type === type && (value === undefined || token.value === value);
+      },
+      () => (tokens[pos] ?? tokens[tokens.length - 1]).location.start,
+    );
+
+    try {
+      return parser.parseExpression();
+    } catch (error: any) {
+      throw new Error(`Expression parse error on line ${lineNumber}: ${error.message}`);
+    }
+  }
+
+  private parseTitledBlockName(rest: string, lineNumber: number): string {
+    const trimmed = rest.trim();
+    if (!trimmed.endsWith(':')) throw new Error(`Expected ':' at line ${lineNumber}`);
+    return this.parseInlineString(trimmed.slice(0, -1).trim());
+  }
+
+  private parseInlineString(text: string): string {
+    const trimmed = text.trim();
+    if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+      return trimmed.slice(1, -1);
+    }
+    return trimmed;
+  }
+
+  private parseSimpleAttributes(raw: string): Record<string, string> {
+    const attrs: Record<string, string> = {};
+    const regex = /([A-Za-z_][\w]*)\s*=\s*("[^"]*"|'[^']*'|[^\s]+)/g;
+    for (const match of raw.matchAll(regex)) {
+      attrs[match[1]] = this.parseInlineString(match[2]);
+    }
+    return attrs;
+  }
+
+  private splitCommaArgs(raw: string): string[] {
+    const parts: string[] = [];
+    let current = '';
+    let depth = 0;
+    let quote: string | null = null;
+
+    for (let i = 0; i < raw.length; i += 1) {
+      const ch = raw[i];
+      if (quote) {
+        current += ch;
+        if (ch === quote && raw[i - 1] !== '\\') quote = null;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        quote = ch;
+        current += ch;
+        continue;
+      }
+      if (['(', '[', '{'].includes(ch)) depth += 1;
+      if ([')', ']', '}'].includes(ch)) depth -= 1;
+      if (ch === ',' && depth === 0) {
+        parts.push(current.trim());
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+
+    if (current.trim()) parts.push(current.trim());
+    return parts;
+  }
+
+  private nextChildIndent(parentIndent: number): number | null {
+    let j = this.index;
+    while (j < this.lines.length) {
+      const line = this.lines[j];
+      if (!line.text || line.text.startsWith('#')) {
+        j += 1;
+        continue;
+      }
+      if (line.indent <= parentIndent) return null;
+      return line.indent;
+    }
+    return null;
+  }
+
+  private peekMeaningful(): LineInfo | null {
+    while (this.index < this.lines.length) {
+      const line = this.lines[this.index];
+      if (!line.text || line.text.startsWith('#')) {
+        this.index += 1;
+        continue;
+      }
+      return line;
+    }
+    return null;
+  }
+
+  private eof(): boolean {
+    return this.index >= this.lines.length;
+  }
+
+  private lineLoc(line: LineInfo): SourceLocation {
+    return {
+      start: this.makePos(line.line, line.indent + 1, 0),
+      end: this.makePos(line.line, line.raw.length + 1, 0),
+    };
+  }
+
+  private makePos(line: number, column: number, offset: number): Position {
+    return { line, column, offset };
+  }
+}
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: src\renderer\chart.ts
+────────────────────────────────────────────────────────────────────────────────
+import { ChartDeclaration, Expression } from '../ast/types';
+import { GSValue, Trace } from '../runtime/values';
+
+export interface ChartConfig {
+  title?: string;
+  type: 'bar' | 'line' | 'scatter' | 'pie';
+  width: number;
+  height: number;
+  xLabel?: string;
+  yLabel?: string;
+}
+
+export interface DataSeries {
+  name: string;
+  x?: number[];
+  y: number[];
+  color?: string;
+}
+
+export function extractChartConfig(decl: ChartDeclaration): ChartConfig {
+  const config: ChartConfig = {
+    title: decl.name,
+    type: 'line',
+    width: 800,
+    height: 400,
+  };
+
+  const typeExpr = decl.properties.type;
+  if (typeExpr?.type === 'Identifier') config.type = typeExpr.name as ChartConfig['type'];
+  if (typeExpr?.type === 'Literal' && typeof typeExpr.value === 'string') config.type = typeExpr.value as ChartConfig['type'];
+  if (decl.properties.width?.type === 'Literal' && typeof decl.properties.width.value === 'number') config.width = decl.properties.width.value;
+  if (decl.properties.height?.type === 'Literal' && typeof decl.properties.height.value === 'number') config.height = decl.properties.height.value;
+  if (decl.properties.xlabel?.type === 'Literal' && typeof decl.properties.xlabel.value === 'string') config.xLabel = decl.properties.xlabel.value;
+  if (decl.properties.ylabel?.type === 'Literal' && typeof decl.properties.ylabel.value === 'string') config.yLabel = decl.properties.ylabel.value;
+
+  return config;
+}
+
+export function buildChartSeries(
+  decl: ChartDeclaration,
+  values: Record<string, GSValue>,
+  traces: Map<string, Trace>
+): DataSeries[] {
+  const sourceExpr = decl.properties.source;
+  const xExpr = decl.properties.x;
+  const yExpr = decl.properties.y;
+
+  if (sourceExpr && sourceExpr.type === 'MemberExpression' && sourceExpr.property === 'trace' && sourceExpr.object.type === 'Identifier') {
+    const trace = traces.get(sourceExpr.object.name);
+    if (!trace) return [];
+    const xColumn = expressionToFieldName(xExpr) ?? trace.columns[0];
+    const yColumn = expressionToFieldName(yExpr) ?? trace.columns.find((col) => col !== xColumn) ?? trace.columns[0];
+    const x = numericColumn(trace, xColumn);
+    const y = numericColumn(trace, yColumn);
+    return y.length ? [{ name: yColumn, x: x.length === y.length ? x : undefined, y }] : [];
+  }
+
+  const x = expressionToArray(xExpr, values);
+  const y = expressionToArray(yExpr, values);
+  if (y.length) {
+    return [{ name: expressionToFieldName(yExpr) ?? 'series', x: x.length === y.length ? x : undefined, y }];
+  }
+
+  const fallback = Object.entries(values)
+    .filter(([, value]) => Array.isArray(value) && value.every((item) => typeof item === 'number'))
+    .map(([name, value]) => ({ name, y: value as number[] }));
+  return fallback;
+}
+
+function numericColumn(trace: Trace, column: string): number[] {
+  return trace.rows
+    .map((row) => row[column])
+    .filter((value): value is number => typeof value === 'number');
+}
+
+function expressionToFieldName(expr?: Expression): string | undefined {
+  if (!expr) return undefined;
+  if (expr.type === 'Identifier') return expr.name;
+  if (expr.type === 'Literal' && typeof expr.value === 'string') return expr.value;
+  return undefined;
+}
+
+function expressionToArray(expr: Expression | undefined, values: Record<string, GSValue>): number[] {
+  if (!expr) return [];
+  if (expr.type === 'Identifier') {
+    const value = values[expr.name];
+    if (Array.isArray(value)) return value.filter((item): item is number => typeof item === 'number');
+  }
+  if (expr.type === 'ArrayExpression') {
+    return expr.elements
+      .map((element) => element.type === 'Literal' && typeof element.value === 'number' ? element.value : null)
+      .filter((value): value is number => typeof value === 'number');
+  }
+  return [];
+}
+
+export function renderBarChart(config: ChartConfig, series: DataSeries[]): string {
+  const { width, height, title, xLabel, yLabel } = config;
+  const padding = { top: 40, right: 20, bottom: 50, left: 60 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+  const allValues = series.flatMap((s) => s.y);
+  const maxValue = Math.max(...allValues, 1);
+  const minValue = Math.min(...allValues, 0);
+  const range = maxValue - minValue || 1;
+  const count = Math.max(...series.map((s) => s.y.length), 1);
+  const groupWidth = chartWidth / count;
+  const barWidth = Math.max(8, (groupWidth - 12) / Math.max(series.length, 1));
+
+  let svg = openSvg(config);
+  svg += `<g transform="translate(${padding.left}, ${padding.top})">`;
+  svg += gridLines(chartWidth, chartHeight, minValue, range);
+
+  series.forEach((s, sIdx) => {
+    const color = palette[sIdx % palette.length];
+    s.y.forEach((val, idx) => {
+      const x = idx * groupWidth + sIdx * barWidth;
+      const barHeight = ((val - minValue) / range) * chartHeight;
+      const y = chartHeight - barHeight;
+      svg += `<rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" fill="${color}" rx="2"><title>${escapeXml(s.name)}: ${val}</title></rect>`;
+    });
+  });
+
+  svg += axesAndLabels(chartWidth, chartHeight, xLabel, yLabel);
+  svg += `</g></svg>`;
+  return svg;
+}
+
+export function renderLineChart(config: ChartConfig, series: DataSeries[]): string {
+  const { width, height, title, xLabel, yLabel } = config;
+  const padding = { top: 40, right: 20, bottom: 50, left: 60 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+  const allY = series.flatMap((s) => s.y);
+  const maxY = Math.max(...allY, 1);
+  const minY = Math.min(...allY, 0);
+  const yRange = maxY - minY || 1;
+  const allX = series.flatMap((s) => s.x ?? s.y.map((_, index) => index));
+  const maxX = Math.max(...allX, 1);
+  const minX = Math.min(...allX, 0);
+  const xRange = maxX - minX || 1;
+
+  let svg = openSvg(config);
+  svg += `<g transform="translate(${padding.left}, ${padding.top})">`;
+  svg += gridLines(chartWidth, chartHeight, minY, yRange);
+
+  series.forEach((s, sIdx) => {
+    const color = palette[sIdx % palette.length];
+    const xs = s.x ?? s.y.map((_, index) => index);
+    const points = s.y.map((value, index) => {
+      const x = ((xs[index] - minX) / xRange) * chartWidth;
+      const y = chartHeight - ((value - minY) / yRange) * chartHeight;
+      return { x, y, value };
+    });
+    svg += `<polyline points="${points.map((p) => `${p.x},${p.y}`).join(' ')}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`;
+    for (const point of points) {
+      svg += `<circle cx="${point.x}" cy="${point.y}" r="4" fill="${color}"><title>${escapeXml(s.name)}: ${point.value}</title></circle>`;
+    }
+  });
+
+  svg += axesAndLabels(chartWidth, chartHeight, xLabel, yLabel);
+  svg += `</g></svg>`;
+  return svg;
+}
+
+export function renderScatterChart(config: ChartConfig, series: DataSeries[]): string {
+  const { width, height, title, xLabel, yLabel } = config;
+  const padding = { top: 40, right: 20, bottom: 50, left: 60 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+  const allY = series.flatMap((s) => s.y);
+  const maxY = Math.max(...allY, 1);
+  const minY = Math.min(...allY, 0);
+  const yRange = maxY - minY || 1;
+  const allX = series.flatMap((s) => s.x ?? [0]);
+  const maxX = Math.max(...allX, 1);
+  const minX = Math.min(...allX, 0);
+  const xRange = maxX - minX || 1;
+
+  let svg = openSvg(config);
+  svg += `<g transform="translate(${padding.left}, ${padding.top})">`;
+  svg += gridLines(chartWidth, chartHeight, minY, yRange);
+
+  series.forEach((s, sIdx) => {
+    const color = palette[sIdx % palette.length];
+    const xs = s.x ?? s.y.map((_, index) => index);
+    for (let i = 0; i < s.y.length; i++) {
+      const x = ((xs[i] - minX) / xRange) * chartWidth;
+      const y = chartHeight - ((s.y[i] - minY) / yRange) * chartHeight;
+      svg += `<circle cx="${x}" cy="${y}" r="6" fill="${color}" opacity="0.7"><title>${escapeXml(s.name)}: (${xs[i]}, ${s.y[i]})</title></circle>`;
+    }
+  });
+
+  svg += axesAndLabels(chartWidth, chartHeight, xLabel, yLabel);
+  svg += `</g></svg>`;
+  return svg;
+}
+
+export function renderPieChart(config: ChartConfig, series: DataSeries[]): string {
+  const { width, height, title } = config;
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const radius = Math.min(width, height) / 2 - 60;
+
+  let svg = openSvg(config);
+
+  const allValues = series.flatMap((s) => s.y);
+  const total = allValues.reduce((a, b) => a + b, 0);
+  if (total === 0) return svg + '</svg>';
+
+  let currentAngle = -90;
+  let index = 0;
+
+  for (const s of series) {
+    for (const val of s.y) {
+      const angle = (val / total) * 360;
+      const startAngle = currentAngle;
+      const endAngle = currentAngle + angle;
+
+      const x1 = centerX + radius * Math.cos((startAngle * Math.PI) / 180);
+      const y1 = centerY + radius * Math.sin((startAngle * Math.PI) / 180);
+      const x2 = centerX + radius * Math.cos((endAngle * Math.PI) / 180);
+      const y2 = centerY + radius * Math.sin((endAngle * Math.PI) / 180);
+
+      const largeArc = angle > 180 ? 1 : 0;
+      const color = palette[index % palette.length];
+
+      svg += `<path d="M ${centerX} ${centerY} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z" fill="${color}" stroke="white" stroke-width="2"><title>${escapeXml(s.name)}: ${val}</title></path>`;
+
+      const midAngle = (startAngle + angle / 2) * Math.PI / 180;
+      const labelRadius = radius * 0.6;
+      const labelX = centerX + labelRadius * Math.cos(midAngle);
+      const labelY = centerY + labelRadius * Math.sin(midAngle);
+      if (angle > 15) {
+        svg += `<text x="${labelX}" y="${labelY}" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="white" font-weight="bold">${Math.round((val / total) * 100)}%</text>`;
+      }
+
+      currentAngle = endAngle;
+      index++;
+    }
+  }
+
+  svg += `</svg>`;
+  return svg;
+}
+
+const palette = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e'];
+
+function openSvg(config: ChartConfig): string {
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${config.width}" height="${config.height}" viewBox="0 0 ${config.width} ${config.height}">`;
+  svg += `<rect width="${config.width}" height="${config.height}" fill="white"/>`;
+  if (config.title) {
+    svg += `<text x="${config.width / 2}" y="25" text-anchor="middle" font-size="18" font-weight="bold">${escapeXml(config.title)}</text>`;
+  }
+  return svg;
+}
+
+function gridLines(chartWidth: number, chartHeight: number, minValue: number, range: number): string {
+  let svg = '';
+  for (let i = 0; i <= 4; i += 1) {
+    const y = chartHeight - (i / 4) * chartHeight;
+    const value = minValue + (i / 4) * range;
+    svg += `<line x1="0" y1="${y}" x2="${chartWidth}" y2="${y}" stroke="#e0e0e0" stroke-dasharray="2"/>`;
+    svg += `<text x="-10" y="${y + 4}" text-anchor="end" font-size="11" fill="#666">${value.toFixed(1)}</text>`;
+  }
+  return svg;
+}
+
+function axesAndLabels(chartWidth: number, chartHeight: number, xLabel?: string, yLabel?: string): string {
+  let svg = `<line x1="0" y1="${chartHeight}" x2="${chartWidth}" y2="${chartHeight}" stroke="#333"/>`;
+  svg += `<line x1="0" y1="0" x2="0" y2="${chartHeight}" stroke="#333"/>`;
+  if (xLabel) svg += `<text x="${chartWidth / 2}" y="${chartHeight + 35}" text-anchor="middle" font-size="12" fill="#333">${escapeXml(xLabel)}</text>`;
+  if (yLabel) svg += `<text x="${-chartHeight / 2}" y="-40" text-anchor="middle" font-size="12" fill="#333" transform="rotate(-90)">${escapeXml(yLabel)}</text>`;
+  return svg;
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: src\renderer\flow.ts
+────────────────────────────────────────────────────────────────────────────────
+import { FlowDeclaration, FlowNode, FlowEdge } from '../ast/types';
+
+export interface FlowLayout {
+  nodes: LayoutNode[];
+  edges: LayoutEdge[];
+  width: number;
+  height: number;
+}
+
+export interface LayoutNode {
+  id: string;
+  label: string;
+  nodeType?: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface LayoutEdge {
+  from: string;
+  to: string;
+  label?: string;
+  points: { x: number; y: number }[];
+}
+
+export function layoutFlow(flow: FlowDeclaration): FlowLayout {
+  const nodes = flow.nodes || [];
+  const edges = flow.edges || [];
+
+  const nodeWidth = 120;
+  const nodeHeight = 50;
+  const horizontalGap = 80;
+  const verticalGap = 60;
+  const padding = 40;
+
+  const adjacency = new Map<string, string[]>();
+  const inDegree = new Map<string, number>();
+
+  for (const node of nodes) {
+    adjacency.set(node.id, []);
+    inDegree.set(node.id, 0);
+  }
+
+  for (const edge of edges) {
+    adjacency.get(edge.from)?.push(edge.to);
+    inDegree.set(edge.to, (inDegree.get(edge.to) || 0) + 1);
+  }
+
+  const levels: string[][] = [];
+  let currentLevel = nodes.filter(n => inDegree.get(n.id) === 0).map(n => n.id);
+
+  if (currentLevel.length === 0) {
+    currentLevel = nodes.map(n => n.id);
+  }
+
+  levels.push([...currentLevel]);
+  const assigned = new Set(currentLevel);
+
+  while (assigned.size < nodes.length) {
+    const nextLevel: string[] = [];
+
+    for (const nodeId of currentLevel) {
+      const neighbors = adjacency.get(nodeId) || [];
+      for (const neighbor of neighbors) {
+        if (!assigned.has(neighbor)) {
+          const allParentsAssigned = edges
+            .filter(e => e.to === neighbor)
+            .every(e => assigned.has(e.from));
+
+          if (allParentsAssigned && !nextLevel.includes(neighbor)) {
+            nextLevel.push(neighbor);
+          }
+        }
+      }
+    }
+
+    if (nextLevel.length === 0) {
+      for (const node of nodes) {
+        if (!assigned.has(node.id)) {
+          nextLevel.push(node.id);
+          break;
+        }
+      }
+    }
+
+    if (nextLevel.length === 0) break;
+
+    levels.push([...nextLevel]);
+    nextLevel.forEach(n => assigned.add(n));
+    currentLevel = nextLevel;
+  }
+
+  const layoutNodes: LayoutNode[] = [];
+  const nodeMap = new Map<string, LayoutNode>();
+
+  levels.forEach((level, row) => {
+    const levelWidth = level.length * nodeWidth + (level.length - 1) * horizontalGap;
+    const startX = (levelWidth > 0 ? -levelWidth / 2 : 0) + nodeWidth / 2;
+
+    level.forEach((nodeId, col) => {
+      const node = nodes.find(n => n.id === nodeId);
+      if (!node) return;
+
+      const x = startX + col * (nodeWidth + horizontalGap);
+      const y = row * (nodeHeight + verticalGap);
+      const label = node.label || node.id;
+
+      const layoutNode: LayoutNode = {
+        id: node.id,
+        label,
+        nodeType: node.nodeType,
+        x,
+        y,
+        width: nodeWidth,
+        height: nodeHeight
+      };
+
+      layoutNodes.push(layoutNode);
+      nodeMap.set(node.id, layoutNode);
+    });
+  });
+
+  const layoutEdges: LayoutEdge[] = edges.map(edge => {
+    const fromNode = nodeMap.get(edge.from);
+    const toNode = nodeMap.get(edge.to);
+
+    if (!fromNode || !toNode) {
+      return { from: edge.from, to: edge.to, label: edge.label, points: [] };
+    }
+
+    const startX = fromNode.x + fromNode.width / 2;
+    const startY = fromNode.y + fromNode.height;
+    const endX = toNode.x + toNode.width / 2;
+    const endY = toNode.y;
+
+    const midY = (startY + endY) / 2;
+    const points = [
+      { x: startX, y: startY },
+      { x: startX, y: midY },
+      { x: endX, y: midY },
+      { x: endX, y: endY }
+    ];
+
+    return {
+      from: edge.from,
+      to: edge.to,
+      label: edge.label,
+      points
+    };
+  });
+
+  let maxX = 0, maxY = 0;
+  for (const node of layoutNodes) {
+    maxX = Math.max(maxX, node.x + node.width / 2);
+    maxY = Math.max(maxY, node.y + node.height / 2);
+  }
+
+  const width = maxX + padding;
+  const height = maxY + padding;
+
+  return { nodes: layoutNodes, edges: layoutEdges, width, height };
+}
+
+export function renderFlow(layout: FlowLayout, title?: string): string {
+  const { width, height, nodes, edges } = layout;
+  const svgWidth = Math.max(width + 100, 400);
+  const svgHeight = Math.max(height + 100, 300);
+  const offsetX = svgWidth / 2;
+  const offsetY = 60;
+
+  let svg = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+  svg += `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">`;
+  svg += `<rect width="${svgWidth}" height="${svgHeight}" fill="white"/>`;
+
+  if (title) {
+    svg += `<text x="${svgWidth / 2}" y="30" text-anchor="middle" font-size="18" font-weight="bold" fill="#333">${escapeXml(title)}</text>`;
+  }
+
+  svg += `<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">`;
+  svg += `<path d="M 0 0 L 10 5 L 0 10 z" fill="#666"/></marker></defs>`;
+  svg += `<g transform="translate(${offsetX}, ${offsetY})">`;
+
+  for (const edge of edges) {
+    if (edge.points.length < 2) continue;
+
+    const pathPoints = edge.points.map(p => `${p.x},${p.y}`).join(' ');
+    svg += `<polyline points="${pathPoints}" fill="none" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/>`;
+
+    if (edge.label) {
+      const midIdx = Math.floor(edge.points.length / 2);
+      const midX = edge.points[midIdx].x;
+      const midY = edge.points[midIdx].y;
+      svg += `<text x="${midX}" y="${midY - 8}" text-anchor="middle" font-size="11" fill="#666">${escapeXml(edge.label)}</text>`;
+    }
+  }
+
+  const nodeColors: Record<string, string> = {
+    start: '#27ae60',
+    end: '#e74c3c',
+    decision: '#f39c12',
+    process: '#3498db',
+    data: '#9b59b6'
+  };
+
+  for (const node of nodes) {
+    const key = (node as any).nodeType?.toLowerCase?.() || node.label.toLowerCase();
+    const fillColor = nodeColors[key] || '#3498db';
+
+    svg += `<g transform="translate(${node.x - node.width / 2}, ${node.y - node.height / 2})">`;
+    svg += `<rect width="${node.width}" height="${node.height}" rx="6" fill="${fillColor}" stroke="#2c3e50" stroke-width="2"/>`;
+    svg += `<text x="${node.width / 2}" y="${node.height / 2 + 5}" text-anchor="middle" font-size="12" fill="white" font-weight="500">${escapeXml(node.label)}</text>`;
+    svg += `</g>`;
+  }
+
+  svg += `</g>`;
+  svg += `</svg>`;
+
+  return svg;
+}
+
+export function renderBlochSphere(cx: number, cy: number, r: number, theta: number, phi: number): string {
+  let svg = '';
+
+  svg += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#ccc" stroke-width="1"/>`;
+
+  svg += `<ellipse cx="${cx}" cy="${cy}" rx="${r}" ry="${r * 0.3}" fill="none" stroke="#ddd" stroke-width="0.5"/>`;
+  svg += `<ellipse cx="${cx}" cy="${cy}" rx="${r * 0.3}" ry="${r}" fill="none" stroke="#ddd" stroke-width="0.5"/>`;
+
+  svg += `<line x1="${cx - r}" y1="${cy}" x2="${cx + r}" y2="${cy}" stroke="#aaa" stroke-width="0.5"/>`;
+  svg += `<line x1="${cx}" y1="${cy - r}" x2="${cx}" y2="${cy + r}" stroke="#aaa" stroke-width="0.5"/>`;
+
+  svg += `<text x="${cx + r + 5}" y="${cy + 4}" font-size="10" fill="#888">x</text>`;
+  svg += `<text x="${cx + 4}" y="${cy - r - 5}" font-size="10" fill="#888">y</text>`;
+  svg += `<text x="${cx + 4}" y="${cy - r - 5}" font-size="10" fill="#888">z</text>`;
+
+  svg += `<text x="${cx}" y="${cy - r - 5}" font-size="10" fill="#888" text-anchor="middle">|0></text>`;
+  svg += `<text x="${cx}" y="${cy + r + 12}" font-size="10" fill="#888" text-anchor="middle">|1></text>`;
+
+  const stateX = r * Math.sin(theta) * Math.cos(phi);
+  const stateY = -r * Math.cos(theta);
+  const stateZ = r * Math.sin(theta) * Math.sin(phi);
+
+  svg += `<line x1="${cx}" y1="${cy}" x2="${cx + stateZ}" y2="${cy + stateX}" stroke="#3498db" stroke-width="2"/>`;
+  svg += `<circle cx="${cx + stateZ}" cy="${cy + stateX}" r="6" fill="#e74c3c"/>`;
+
+  const perpX = -stateY;
+  const perpY = stateX;
+  const perpLen = Math.sqrt(perpX * perpX + perpY * perpY) || 1;
+  const arrowLen = 12;
+  const arrowX1 = stateZ - (perpX / perpLen) * arrowLen;
+  const arrowY1 = stateX - (perpY / perpLen) * arrowLen;
+  const arrowX2 = stateZ + (perpX / perpLen) * arrowLen;
+  const arrowY2 = stateX + (perpY / perpLen) * arrowLen;
+  svg += `<line x1="${cx + arrowX1}" y1="${cy + arrowY1}" x2="${cx + arrowX2}" y2="${cy + arrowY2}" stroke="#e74c3c" stroke-width="2"/>`;
+
+  return svg;
+}
+
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: src\renderer\index.ts
+────────────────────────────────────────────────────────────────────────────────
+import * as fs from 'fs';
+import * as path from 'path';
+import { ChartDeclaration, FlowDeclaration } from '../ast/types';
+import { GSValue, Trace } from '../runtime/values';
+import { buildChartSeries, extractChartConfig, renderBarChart, renderLineChart, renderScatterChart, renderPieChart } from './chart';
+import { layoutFlow, renderFlow } from './flow';
+
+export interface RenderOptions {
+  outputDir?: string;
+  format?: 'svg';
+}
+
+export class Renderer {
+  constructor(private options: RenderOptions = {}) {}
+
+  render(values: Record<string, GSValue>, traces: Map<string, Trace>, options: RenderOptions = {}): void {
+    const outputDir = options.outputDir || this.options.outputDir || './output';
+    fs.mkdirSync(outputDir, { recursive: true });
+
+    for (const [name, value] of Object.entries(values)) {
+      if (!value || typeof value !== 'object') continue;
+      const decl = value as any;
+      if (decl.type === 'ChartDeclaration') {
+        this.renderChart(name, decl as ChartDeclaration, values, traces, outputDir);
+      } else if (decl.type === 'FlowDeclaration') {
+        this.renderFlow(name, decl as FlowDeclaration, outputDir);
+      }
+    }
+  }
+
+  private renderChart(name: string, chart: ChartDeclaration, values: Record<string, GSValue>, traces: Map<string, Trace>, outputDir: string): void {
+    const config = extractChartConfig(chart);
+    const series = buildChartSeries(chart, values, traces);
+    if (!series.length) return;
+    let svg: string;
+    switch (config.type) {
+      case 'bar': svg = renderBarChart(config, series); break;
+      case 'scatter': svg = renderScatterChart(config, series); break;
+      case 'pie': svg = renderPieChart(config, series); break;
+      default: svg = renderLineChart(config, series); break;
+    }
+    const outputPath = path.join(outputDir, `${chart.name || name}.svg`);
+    fs.writeFileSync(outputPath, svg, 'utf-8');
+    console.log(`Rendered chart: ${outputPath}`);
+  }
+
+  private renderFlow(name: string, flow: FlowDeclaration, outputDir: string): void {
+    const svg = renderFlow(layoutFlow(flow), flow.name || name);
+    const outputPath = path.join(outputDir, `${flow.name || name}.svg`);
+    fs.writeFileSync(outputPath, svg, 'utf-8');
+    console.log(`Rendered flow: ${outputPath}`);
+  }
+}
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: src\runtime\builtins.ts
+────────────────────────────────────────────────────────────────────────────────
+import { GSValue, GSFunction } from './values';
+
+export function createBuiltins(): Record<string, GSValue> {
+  return {
+    ...Math,
+    range: (start: number, end: number, step: number = 1): number[] => {
+      const result: number[] = [];
+      for (let i = start; i < end; i += step) result.push(i);
+      return result;
+    },
+    linspace: (start: number, end: number, count: number): number[] => {
+      const step = (end - start) / (count - 1);
+      return Array.from({ length: count }, (_, i) => start + i * step);
+    },
+    sin: Math.sin,
+    cos: Math.cos,
+    tan: Math.tan,
+    exp: Math.exp,
+    log: Math.log,
+    sqrt: Math.sqrt,
+    abs: Math.abs,
+    min: Math.min,
+    max: Math.max,
+    floor: Math.floor,
+    ceil: Math.ceil,
+    round: Math.round,
+    pow: Math.pow,
+    sigmoid: (x: number) => 1 / (1 + Math.exp(-x)),
+    tanh: Math.tanh,
+    len: (arr: GSValue): number => {
+      if (Array.isArray(arr)) return arr.length;
+      if (typeof arr === 'string') return arr.length;
+      if (typeof arr === 'object' && arr !== null) return Object.keys(arr).length;
+      return 0;
+    },
+    map: (arr: GSValue[], fn: (v: GSValue) => GSValue): GSValue[] => arr.map(v => fn(v)),
+    filter: (arr: GSValue[], fn: (v: GSValue) => boolean): GSValue[] => arr.filter(v => fn(v)),
+    reduce: (arr: GSValue[], fn: (acc: GSValue, v: GSValue) => GSValue, init?: GSValue): GSValue =>
+      arr.reduce((acc, v) => fn(acc, v), init ?? arr[0]),
+    zip: (...arrs: GSValue[][]): GSValue[][] => {
+      const len = Math.min(...arrs.map(a => a.length));
+      return Array.from({ length: len }, (_, i) => arrs.map(a => a[i]));
+    },
+    print: (...args: GSValue[]) => {
+      console.log(...args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : a));
+      return null;
+    },
+    true: true,
+    false: false,
+    null: null,
+    PI: Math.PI,
+    E: Math.E,
+  };
+}
+
+export function createGSFunction(params: string[], body: any[], closure: Record<string, GSValue>): GSFunction {
+  return {
+    type: 'function',
+    params,
+    body,
+    closure: { ...closure }
+  };
+}
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: src\runtime\index.ts
+────────────────────────────────────────────────────────────────────────────────
+import {
+  Expression,
+  Program,
+  Statement,
+  TopLevelNode,
+  AlgoDeclaration,
+} from '../ast/types';
+import { createBuiltins, createGSFunction } from './builtins';
+import { ScopeManager } from './scope';
+import { compare, GSAlgorithm, GSFunction, GSValue, isEqual, isTruthy, Trace } from './values';
+
+interface ReturnSignal {
+  kind: 'return';
+  value: GSValue;
+}
+
+interface LoopSignal {
+  kind: 'break' | 'continue';
+}
+
+type ControlSignal = ReturnSignal | LoopSignal;
+
+function isControlSignal(value: unknown): value is ControlSignal {
+  return !!value && typeof value === 'object' && 'kind' in (value as Record<string, unknown>);
+}
+
+export class Evaluator {
+  private scope = new ScopeManager();
+  private algorithms = new Map<string, GSAlgorithm>();
+  private traces = new Map<string, Trace>();
+  private currentAlgo: GSAlgorithm | null = null;
+
+  constructor() {
+    for (const [name, value] of Object.entries(createBuiltins())) {
+      this.scope.define(name, value);
+    }
+  }
+
+  execute(program: Program): Record<string, GSValue> {
+    for (const node of program.body) {
+      this.executeTopLevel(node);
+    }
+    return this.scope.getAllValues();
+  }
+
+  getTraces(): Map<string, Trace> {
+    return this.traces;
+  }
+
+  getTrace(name: string): Trace | undefined {
+    return this.traces.get(name);
+  }
+
+  getAlgorithm(name: string): GSAlgorithm | undefined {
+    return this.algorithms.get(name);
+  }
+
+  private executeTopLevel(node: TopLevelNode): void {
+    switch (node.type) {
+      case 'UseStatement':
+      case 'ImportStatement':
+      case 'RenderDeclaration':
+        return;
+      case 'ConstDeclaration':
+        this.scope.define(node.name, this.evalExpression(node.value));
+        return;
+      case 'DataDeclaration':
+        for (const binding of node.bindings) {
+          this.scope.define(binding.name, this.evalExpression(binding.value));
+        }
+        return;
+      case 'FuncDeclaration':
+        this.scope.define(node.name, createGSFunction(node.params, node.body, this.scope.getAllValues()));
+        return;
+      case 'AlgoDeclaration': {
+        const algo: GSAlgorithm = {
+          type: 'algorithm',
+          name: node.name,
+          params: node.params,
+          body: node.body,
+          trace: { type: 'trace', columns: [], rows: [] },
+        };
+        this.algorithms.set(node.name, algo);
+        this.traces.set(node.name, algo.trace);
+        this.scope.define(node.name, algo);
+        return;
+      }
+      case 'ThemeDeclaration':
+      case 'StyleDeclaration':
+      case 'PseudoDeclaration':
+      case 'ChartDeclaration':
+      case 'FlowDeclaration':
+      case 'DiagramDeclaration':
+      case 'TableDeclaration':
+      case 'Plot3dDeclaration':
+      case 'Scene3dDeclaration':
+      case 'ErdDeclaration':
+      case 'InfraDeclaration':
+      case 'PageDeclaration':
+        this.scope.define((node as any).name, { ...node });
+        return;
+      case 'SubDeclaration':
+        this.scope.define(node.name, createGSFunction(node.params, [], this.scope.getAllValues()));
+        return;
+      case 'ComponentDeclaration': {
+        const moduleValue = this.scope.get(node.module);
+        if (moduleValue && typeof moduleValue === 'object' && (moduleValue as GSFunction).type === 'function') {
+          const args = Object.keys(node.args).map((key) => this.evalExpression(node.args[key]));
+          this.scope.define(node.name, this.runFunction(moduleValue as GSFunction, args));
+        }
+        return;
+      }
+    }
+  }
+
+  private evalExpression(expr: Expression): GSValue {
+    switch (expr.type) {
+      case 'Literal':
+        return expr.value;
+      case 'Identifier':
+        return this.scope.get(expr.name) ?? null;
+      case 'ArrayExpression':
+        return expr.elements.map((element) => this.evalExpression(element));
+      case 'ObjectExpression': {
+        const result: Record<string, GSValue> = {};
+        for (const prop of expr.properties) result[prop.key] = this.evalExpression(prop.value);
+        return result;
+      }
+      case 'BinaryExpression':
+        return this.evalBinary(expr.operator, expr.left, expr.right);
+      case 'UnaryExpression': {
+        const value = this.evalExpression(expr.operand);
+        return expr.operator === '-' ? -(value as number) : !isTruthy(value);
+      }
+      case 'CallExpression': {
+        const callee = typeof expr.callee === 'string'
+          ? expr.callee
+          : expr.callee.type === 'Identifier'
+            ? expr.callee.name
+            : null;
+        if (!callee) return null;
+        const fn = this.scope.get(callee);
+        const args = expr.args.map((arg) => this.evalExpression(arg));
+        if (typeof fn === 'function') return fn(...args);
+        if (fn && typeof fn === 'object' && (fn as GSFunction).type === 'function') return this.runFunction(fn as GSFunction, args);
+        if (fn && typeof fn === 'object' && (fn as GSAlgorithm).type === 'algorithm') return this.runAlgorithm(fn as GSAlgorithm, args);
+        return null;
+      }
+      case 'MemberExpression': {
+        const object = this.evalExpression(expr.object);
+        if (object && typeof object === 'object') return (object as Record<string, GSValue>)[expr.property] ?? null;
+        return null;
+      }
+      case 'IndexExpression': {
+        const object = this.evalExpression(expr.object);
+        const index = this.evalExpression(expr.index);
+        if (Array.isArray(object)) return object[index as number] ?? null;
+        if (object && typeof object === 'object') return (object as Record<string, GSValue>)[String(index)] ?? null;
+        if (typeof object === 'string') return object[index as number] ?? null;
+        return null;
+      }
+      case 'ConditionalExpression':
+        return isTruthy(this.evalExpression(expr.test))
+          ? this.evalExpression(expr.consequent)
+          : this.evalExpression(expr.alternate);
+    }
+  }
+
+  private evalBinary(operator: string, leftExpr: Expression, rightExpr: Expression): GSValue {
+    const left = this.evalExpression(leftExpr);
+    const right = this.evalExpression(rightExpr);
+    switch (operator) {
+      case '+': return (left as number) + (right as number);
+      case '-': return (left as number) - (right as number);
+      case '*': return (left as number) * (right as number);
+      case '/': return (left as number) / (right as number);
+      case '%': return (left as number) % (right as number);
+      case '^': return Math.pow(left as number, right as number);
+      case '==': return isEqual(left, right);
+      case '!=': return !isEqual(left, right);
+      case '<': return compare(left, right, '<');
+      case '>': return compare(left, right, '>');
+      case '<=': return compare(left, right, '<=');
+      case '>=': return compare(left, right, '>=');
+      case '&&': return isTruthy(left) && isTruthy(right);
+      case '||': return isTruthy(left) || isTruthy(right);
+      default: return null;
+    }
+  }
+
+  private runFunction(fn: GSFunction, args: GSValue[]): GSValue {
+    const scope = this.scope.createScope(this.scope.getCurrentScope());
+    fn.params.forEach((param, index) => {
+      scope.values[param] = args[index];
+    });
+    for (const [key, value] of Object.entries(fn.closure)) {
+      if (!(key in scope.values)) scope.values[key] = value;
+    }
+    this.scope.pushScope(scope);
+    const signal = this.evalStatements(fn.body);
+    this.scope.popScope();
+    return signal && signal.kind === 'return' ? signal.value : null;
+  }
+
+  private runAlgorithm(algo: GSAlgorithm, args: GSValue[]): GSValue {
+    algo.trace.columns = [];
+    algo.trace.rows = [];
+
+    const scope = this.scope.createScope(this.scope.getCurrentScope());
+    algo.params.forEach((param, index) => {
+      scope.values[param] = args[index];
+    });
+    this.scope.pushScope(scope);
+    const previousAlgo = this.currentAlgo;
+    this.currentAlgo = algo;
+    const signal = this.evalStatements(algo.body);
+    this.currentAlgo = previousAlgo;
+    this.scope.popScope();
+    return signal && signal.kind === 'return' ? signal.value : null;
+  }
+
+  private evalStatements(statements: Statement[]): ControlSignal | null {
+    for (const statement of statements) {
+      const result = this.evalStatement(statement);
+      if (isControlSignal(result)) return result;
+    }
+    return null;
+  }
+
+  private evalStatement(statement: Statement): ControlSignal | null {
+    switch (statement.type) {
+      case 'ExpressionStatement':
+        this.evalExpression(statement.expression);
+        return null;
+      case 'AssignmentStatement':
+        this.scope.set(statement.target, this.evalExpression(statement.value));
+        return null;
+      case 'ReturnStatement':
+        return { kind: 'return', value: statement.value ? this.evalExpression(statement.value) : null };
+      case 'BreakStatement':
+        return { kind: 'break' };
+      case 'ContinueStatement':
+        return { kind: 'continue' };
+      case 'EmitStatement':
+        this.emitTraceRow(statement.fields.map((field) => ({ name: field.name, value: this.evalExpression(field.value) })));
+        return null;
+      case 'IfStatement': {
+        if (isTruthy(this.evalExpression(statement.condition))) return this.evalStatements(statement.thenBranch);
+        for (const branch of statement.elseIfBranches ?? []) {
+          if (isTruthy(this.evalExpression(branch.condition))) return this.evalStatements(branch.body);
+        }
+        if (statement.elseBranch) return this.evalStatements(statement.elseBranch);
+        return null;
+      }
+      case 'WhileStatement': {
+        while (isTruthy(this.evalExpression(statement.condition))) {
+          const result = this.evalStatements(statement.body);
+          if (!result) continue;
+          if (result.kind === 'continue') continue;
+          if (result.kind === 'break') break;
+          return result;
+        }
+        return null;
+      }
+      case 'ForStatement': {
+        const iterable = this.evalExpression(statement.iterable);
+        if (!Array.isArray(iterable)) return null;
+        for (const item of iterable) {
+          this.scope.set(statement.variable, item);
+          const result = this.evalStatements(statement.body);
+          if (!result) continue;
+          if (result.kind === 'continue') continue;
+          if (result.kind === 'break') break;
+          return result;
+        }
+        return null;
+      }
+    }
+  }
+
+  private emitTraceRow(fields: { name: string; value: GSValue }[]): void {
+    if (!this.currentAlgo) return;
+    const row: Record<string, GSValue> = {};
+    for (const field of fields) row[field.name] = field.value;
+    if (this.currentAlgo.trace.columns.length === 0) {
+      this.currentAlgo.trace.columns = fields.map((field) => field.name);
+    }
+    this.currentAlgo.trace.rows.push(row);
+  }
+}
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: src\runtime\scope.ts
+────────────────────────────────────────────────────────────────────────────────
+import { RuntimeScope, GSValue } from './values';
+
+export class ScopeManager {
+  private scope: RuntimeScope;
+
+  constructor() {
+    this.scope = this.createScope();
+  }
+
+  createScope(parent?: RuntimeScope): RuntimeScope {
+    return { parent, values: {} };
+  }
+
+  pushScope(scope?: RuntimeScope): void {
+    this.scope = scope || this.createScope(this.scope);
+  }
+
+  popScope(): void {
+    if (this.scope.parent) this.scope = this.scope.parent;
+  }
+
+  getCurrentScope(): RuntimeScope {
+    return this.scope;
+  }
+
+  set(name: string, value: GSValue): void {
+    let current: RuntimeScope | undefined = this.scope;
+    while (current) {
+      if (name in current.values) {
+        current.values[name] = value;
+        return;
+      }
+      current = current.parent;
+    }
+    this.scope.values[name] = value;
+  }
+
+  define(name: string, value: GSValue): void {
+    this.scope.values[name] = value;
+  }
+
+  get(name: string): GSValue | undefined {
+    let current: RuntimeScope | undefined = this.scope;
+    while (current) {
+      if (name in current.values) return current.values[name];
+      current = current.parent;
+    }
+    return undefined;
+  }
+
+  getAllValues(): Record<string, GSValue> {
+    const result: Record<string, GSValue> = {};
+    const stack: RuntimeScope[] = [];
+    let current: RuntimeScope | undefined = this.scope;
+    while (current) {
+      stack.push(current);
+      current = current.parent;
+    }
+    while (stack.length) {
+      Object.assign(result, stack.pop()!.values);
+    }
+    return result;
+  }
+}
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: src\runtime\values.ts
+────────────────────────────────────────────────────────────────────────────────
+export type GSValue = string | number | boolean | null | undefined | GSFunction | GSAlgorithm | Trace | any[] | Record<string, any>;
+
+export interface GSFunction {
+  type: 'function';
+  name?: string;
+  params: string[];
+  body: any[];
+  closure: Record<string, GSValue>;
+}
+
+export interface GSAlgorithm {
+  type: 'algorithm';
+  name: string;
+  params: string[];
+  body: any[];
+  trace: Trace;
+}
+
+export interface Trace {
+  type: 'trace';
+  columns: string[];
+  rows: Record<string, GSValue>[];
+}
+
+export interface RuntimeScope {
+  parent?: RuntimeScope;
+  values: Record<string, GSValue>;
+}
+
+export function isTruthy(value: GSValue): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') return value.length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'object') return true;
+  return false;
+}
+
+export function isEqual(a: GSValue, b: GSValue): boolean {
+  if (a === b) return true;
+  if (typeof a !== typeof b) return false;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    return a.every((v, i) => isEqual(v, b[i]));
+  }
+  if (typeof a === 'object' && a !== null && b !== null) {
+    const aKeys = Object.keys(a as object);
+    const bKeys = Object.keys(b as object);
+    if (aKeys.length !== bKeys.length) return false;
+    return aKeys.every(k => isEqual((a as any)[k], (b as any)[k]));
+  }
+  return false;
+}
+
+export function compare(a: GSValue, b: GSValue, op: '<' | '>' | '<=' | '>='): boolean {
+  const numA = typeof a === 'number' ? a : parseFloat(a as string);
+  const numB = typeof b === 'number' ? b : parseFloat(b as string);
+
+  switch (op) {
+    case '<': return numA < numB;
+    case '>': return numA > numB;
+    case '<=': return numA <= numB;
+    case '>=': return numA >= numB;
+    default: return false;
+  }
+}
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: src\tokenizer\index.ts
+────────────────────────────────────────────────────────────────────────────────
+import { Token, Position, TokenType } from '../ast/types';
+
+export class Tokenizer {
+  private source = '';
+  private pos = 0;
+  private line = 1;
+  private column = 1;
+  private tokens: Token[] = [];
+
+  tokenize(source: string): Token[] {
+    this.source = source;
+    this.pos = 0;
+    this.line = 1;
+    this.column = 1;
+    this.tokens = [];
+
+    while (!this.isAtEnd()) {
+      const ch = this.peek();
+      const start = this.currentPos();
+
+      if (ch === ' ' || ch === '\t' || ch === '\r') {
+        this.advance();
+        continue;
+      }
+
+      if (ch === '\n') {
+        this.advance();
+        this.addToken('NEWLINE', '\n', start);
+        continue;
+      }
+
+      if (ch === '#') {
+        while (!this.isAtEnd() && this.peek() !== '\n') this.advance();
+        continue;
+      }
+
+      if (ch === '"' || ch === "'") {
+        this.scanString(start, ch);
+        continue;
+      }
+
+      if (this.isDigit(ch)) {
+        this.scanNumber(start);
+        continue;
+      }
+
+      if (this.isAlpha(ch) || ch === '_') {
+        this.scanIdentifier(start);
+        continue;
+      }
+
+      if (this.scanOperator(start)) continue;
+      if (this.scanPunctuation(start)) continue;
+
+      this.advance();
+    }
+
+    this.addToken('EOF', '', this.currentPos());
+    return this.tokens;
+  }
+
+  private scanString(start: Position, quote: string): void {
+    this.advance();
+    let value = '';
+
+    while (!this.isAtEnd() && this.peek() !== quote) {
+      const ch = this.advance();
+      if (ch === '\\' && !this.isAtEnd()) {
+        const next = this.advance();
+        value += next === 'n' ? '\n' : next === 't' ? '\t' : next === 'r' ? '\r' : next;
+      } else {
+        value += ch;
+      }
+    }
+
+    if (!this.isAtEnd()) this.advance();
+    this.addToken('STRING', value, start);
+  }
+
+  private scanNumber(start: Position): void {
+    let value = '';
+    while (!this.isAtEnd() && this.isDigit(this.peek())) value += this.advance();
+    if (!this.isAtEnd() && this.peek() === '.' && this.isDigit(this.peekNext())) {
+      value += this.advance();
+      while (!this.isAtEnd() && this.isDigit(this.peek())) value += this.advance();
+    }
+    this.addToken('NUMBER', value, start);
+  }
+
+  private scanIdentifier(start: Position): void {
+    let value = '';
+    while (!this.isAtEnd() && (this.isAlphaNumeric(this.peek()) || this.peek() === '_')) {
+      value += this.advance();
+    }
+
+    if (value === 'true' || value === 'false') {
+      this.addToken('BOOLEAN', value, start);
+    } else if (value === 'null') {
+      this.addToken('NULL', value, start);
+    } else {
+      this.addToken('IDENTIFIER', value, start);
+    }
+  }
+
+  private scanOperator(start: Position): boolean {
+    const ch = this.peek();
+    const next = this.peekNext();
+
+    if (ch === '-' && next === '>') {
+      this.advance();
+      this.advance();
+      this.addToken('ARROW', '->', start);
+      return true;
+    }
+
+    const twoChar = `${ch}${next}`;
+    if (['==', '!=', '<=', '>=', '&&', '||'].includes(twoChar)) {
+      this.advance();
+      this.advance();
+      this.addToken('OPERATOR', twoChar, start);
+      return true;
+    }
+
+    if ('+-*/%^<>!?'.includes(ch)) {
+      this.advance();
+      this.addToken('OPERATOR', ch, start);
+      return true;
+    }
+
+    return false;
+  }
+
+  private scanPunctuation(start: Position): boolean {
+    const ch = this.peek();
+    const map: Record<string, TokenType> = {
+      '[': 'LBRACKET',
+      ']': 'RBRACKET',
+      '(': 'LPAREN',
+      ')': 'RPAREN',
+      '{': 'LBRACE',
+      '}': 'RBRACE',
+      ':': 'COLON',
+      ',': 'COMMA',
+      '|': 'PIPE',
+      '.': 'PERIOD',
+      '=': 'EQUALS',
+    };
+
+    const type = map[ch];
+    if (!type) return false;
+    this.advance();
+    this.addToken(type, ch, start);
+    return true;
+  }
+
+  private addToken(type: TokenType, value: string, start: Position): void {
+    this.tokens.push({
+      type,
+      value,
+      location: { start, end: this.currentPos() },
+    });
+  }
+
+  private currentPos(): Position {
+    return { line: this.line, column: this.column, offset: this.pos };
+  }
+
+  private advance(): string {
+    const ch = this.source[this.pos++] ?? '';
+    if (ch === '\n') {
+      this.line += 1;
+      this.column = 1;
+    } else {
+      this.column += 1;
+    }
+    return ch;
+  }
+
+  private peek(): string {
+    return this.source[this.pos] ?? '';
+  }
+
+  private peekNext(): string {
+    return this.source[this.pos + 1] ?? '';
+  }
+
+  private isAtEnd(): boolean {
+    return this.pos >= this.source.length;
+  }
+
+  private isDigit(ch: string): boolean {
+    return /[0-9]/.test(ch);
+  }
+
+  private isAlpha(ch: string): boolean {
+    return /[A-Za-z]/.test(ch);
+  }
+
+  private isAlphaNumeric(ch: string): boolean {
+    return /[A-Za-z0-9]/.test(ch);
+  }
+}
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: src\tokenizer\types.ts
+────────────────────────────────────────────────────────────────────────────────
+import { Token, Position, SourceLocation } from '../ast/types';
+
+export const KEYWORDS = new Set([
+  'true', 'false', 'null'
+]);
+
+export const BLOCK_KEYWORDS = new Set([
+  'if', 'else', 'while', 'for', 'return', 'emit', 'end'
+]);
+
+export const DECLARATION_KEYWORDS = new Set([
+  'use', 'import', 'const', 'data', 'func', 'theme', 'style', 'sub',
+  'component', 'algo', 'chart', 'flow', 'diagram', 'table', 'plot3d',
+  'scene3d', 'erd', 'infra', 'page', 'render'
+]);
+
+export function createLocation(start: Position, end: Position): SourceLocation {
+  return { start, end };
+}
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: tests\parser\parser.test.d.ts
+────────────────────────────────────────────────────────────────────────────────
+export {};
+//# sourceMappingURL=parser.test.d.ts.map
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: tests\parser\parser.test.d.ts.map
+────────────────────────────────────────────────────────────────────────────────
+{"version":3,"file":"parser.test.d.ts","sourceRoot":"","sources":["parser.test.ts"],"names":[],"mappings":""}
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: tests\parser\parser.test.js
+────────────────────────────────────────────────────────────────────────────────
+import { Parser } from '@graphscript/parser';
+describe('Parser', () => {
+    test('parses simple data declaration', () => {
+        const parser = new Parser();
+        const program = parser.parse(`data:
+  x = 1
+  y = 2
+`);
+        expect(program.body.length).toBe(1);
+        expect(program.body[0].type).toBe('DataDeclaration');
+    });
+    test('parses constant declaration', () => {
+        const parser = new Parser();
+        const program = parser.parse(`const x = 10`);
+        expect(program.body.length).toBe(1);
+        expect(program.body[0].type).toBe('ConstDeclaration');
+    });
+    test('parses use statement', () => {
+        const parser = new Parser();
+        const program = parser.parse(`use chart`);
+        expect(program.body.length).toBe(1);
+        expect(program.body[0].type).toBe('UseStatement');
+    });
+    test('parses chart declaration', () => {
+        const parser = new Parser();
+        const program = parser.parse(`chart "Test":
+  type = line
+  x = [1, 2, 3]
+  y = [4, 5, 6]
+`);
+        expect(program.body.length).toBe(1);
+        expect(program.body[0].type).toBe('ChartDeclaration');
+    });
+    test('parses algorithm with emit', () => {
+        const parser = new Parser();
+        const program = parser.parse(`algo Test(arr):
+  x = 1
+  emit:
+    x = x
+`);
+        expect(program.body.length).toBe(1);
+        expect(program.body[0].type).toBe('AlgoDeclaration');
+    });
+    test('parses flow declaration with nodes', () => {
+        const parser = new Parser();
+        const program = parser.parse(`flow "Test":
+  node a type=start
+  node b type=end
+  a -> b
+`);
+        expect(program.body.length).toBe(1);
+        expect(program.body[0].type).toBe('FlowDeclaration');
+    });
+});
+//# sourceMappingURL=parser.test.js.map
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: tests\parser\parser.test.js.map
+────────────────────────────────────────────────────────────────────────────────
+{"version":3,"file":"parser.test.js","sourceRoot":"","sources":["parser.test.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,MAAM,EAAE,MAAM,qBAAqB,CAAC;AAE7C,QAAQ,CAAC,QAAQ,EAAE,GAAG,EAAE;IACtB,IAAI,CAAC,gCAAgC,EAAE,GAAG,EAAE;QAC1C,MAAM,MAAM,GAAG,IAAI,MAAM,EAAE,CAAC;QAC5B,MAAM,OAAO,GAAG,MAAM,CAAC,KAAK,CAAC;;;CAGhC,CAAC,CAAC;QACC,MAAM,CAAC,OAAO,CAAC,IAAI,CAAC,MAAM,CAAC,CAAC,IAAI,CAAC,CAAC,CAAC,CAAC;QACpC,MAAM,CAAC,OAAO,CAAC,IAAI,CAAC,CAAC,CAAC,CAAC,IAAI,CAAC,CAAC,IAAI,CAAC,iBAAiB,CAAC,CAAC;IACvD,CAAC,CAAC,CAAC;IAEH,IAAI,CAAC,6BAA6B,EAAE,GAAG,EAAE;QACvC,MAAM,MAAM,GAAG,IAAI,MAAM,EAAE,CAAC;QAC5B,MAAM,OAAO,GAAG,MAAM,CAAC,KAAK,CAAC,cAAc,CAAC,CAAC;QAC7C,MAAM,CAAC,OAAO,CAAC,IAAI,CAAC,MAAM,CAAC,CAAC,IAAI,CAAC,CAAC,CAAC,CAAC;QACpC,MAAM,CAAC,OAAO,CAAC,IAAI,CAAC,CAAC,CAAC,CAAC,IAAI,CAAC,CAAC,IAAI,CAAC,kBAAkB,CAAC,CAAC;IACxD,CAAC,CAAC,CAAC;IAEH,IAAI,CAAC,sBAAsB,EAAE,GAAG,EAAE;QAChC,MAAM,MAAM,GAAG,IAAI,MAAM,EAAE,CAAC;QAC5B,MAAM,OAAO,GAAG,MAAM,CAAC,KAAK,CAAC,WAAW,CAAC,CAAC;QAC1C,MAAM,CAAC,OAAO,CAAC,IAAI,CAAC,MAAM,CAAC,CAAC,IAAI,CAAC,CAAC,CAAC,CAAC;QACpC,MAAM,CAAC,OAAO,CAAC,IAAI,CAAC,CAAC,CAAC,CAAC,IAAI,CAAC,CAAC,IAAI,CAAC,cAAc,CAAC,CAAC;IACpD,CAAC,CAAC,CAAC;IAEH,IAAI,CAAC,0BAA0B,EAAE,GAAG,EAAE;QACpC,MAAM,MAAM,GAAG,IAAI,MAAM,EAAE,CAAC;QAC5B,MAAM,OAAO,GAAG,MAAM,CAAC,KAAK,CAAC;;;;CAIhC,CAAC,CAAC;QACC,MAAM,CAAC,OAAO,CAAC,IAAI,CAAC,MAAM,CAAC,CAAC,IAAI,CAAC,CAAC,CAAC,CAAC;QACpC,MAAM,CAAC,OAAO,CAAC,IAAI,CAAC,CAAC,CAAC,CAAC,IAAI,CAAC,CAAC,IAAI,CAAC,kBAAkB,CAAC,CAAC;IACxD,CAAC,CAAC,CAAC;IAEH,IAAI,CAAC,4BAA4B,EAAE,GAAG,EAAE;QACtC,MAAM,MAAM,GAAG,IAAI,MAAM,EAAE,CAAC;QAC5B,MAAM,OAAO,GAAG,MAAM,CAAC,KAAK,CAAC;;;;CAIhC,CAAC,CAAC;QACC,MAAM,CAAC,OAAO,CAAC,IAAI,CAAC,MAAM,CAAC,CAAC,IAAI,CAAC,CAAC,CAAC,CAAC;QACpC,MAAM,CAAC,OAAO,CAAC,IAAI,CAAC,CAAC,CAAC,CAAC,IAAI,CAAC,CAAC,IAAI,CAAC,iBAAiB,CAAC,CAAC;IACvD,CAAC,CAAC,CAAC;IAEH,IAAI,CAAC,oCAAoC,EAAE,GAAG,EAAE;QAC9C,MAAM,MAAM,GAAG,IAAI,MAAM,EAAE,CAAC;QAC5B,MAAM,OAAO,GAAG,MAAM,CAAC,KAAK,CAAC;;;;CAIhC,CAAC,CAAC;QACC,MAAM,CAAC,OAAO,CAAC,IAAI,CAAC,MAAM,CAAC,CAAC,IAAI,CAAC,CAAC,CAAC,CAAC;QACpC,MAAM,CAAC,OAAO,CAAC,IAAI,CAAC,CAAC,CAAC,CAAC,IAAI,CAAC,CAAC,IAAI,CAAC,iBAAiB,CAAC,CAAC;IACvD,CAAC,CAAC,CAAC;AACL,CAAC,CAAC,CAAC"}
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: tests\parser\parser.test.ts
+────────────────────────────────────────────────────────────────────────────────
+import { Parser } from '@graphscript/parser';
+
+describe('Parser', () => {
+  test('parses simple data declaration', () => {
+    const parser = new Parser();
+    const program = parser.parse(`data:
+  x = 1
+  y = 2
+`);
+    expect(program.body.length).toBe(1);
+    expect(program.body[0].type).toBe('DataDeclaration');
+  });
+
+  test('parses constant declaration', () => {
+    const parser = new Parser();
+    const program = parser.parse(`const x = 10`);
+    expect(program.body.length).toBe(1);
+    expect(program.body[0].type).toBe('ConstDeclaration');
+  });
+
+  test('parses use statement', () => {
+    const parser = new Parser();
+    const program = parser.parse(`use chart`);
+    expect(program.body.length).toBe(1);
+    expect(program.body[0].type).toBe('UseStatement');
+  });
+
+  test('parses chart declaration', () => {
+    const parser = new Parser();
+    const program = parser.parse(`chart "Test":
+  type = line
+  x = [1, 2, 3]
+  y = [4, 5, 6]
+`);
+    expect(program.body.length).toBe(1);
+    expect(program.body[0].type).toBe('ChartDeclaration');
+  });
+
+  test('parses algorithm with emit', () => {
+    const parser = new Parser();
+    const program = parser.parse(`algo Test(arr):
+  x = 1
+  emit:
+    x = x
+`);
+    expect(program.body.length).toBe(1);
+    expect(program.body[0].type).toBe('AlgoDeclaration');
+  });
+
+  test('parses flow declaration with nodes', () => {
+    const parser = new Parser();
+    const program = parser.parse(`flow "Test":
+  node a type=start
+  node b type=end
+  a -> b
+`);
+    expect(program.body.length).toBe(1);
+    expect(program.body[0].type).toBe('FlowDeclaration');
+  });
+});
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: tests\runtime\runtime.test.d.ts
+────────────────────────────────────────────────────────────────────────────────
+export {};
+//# sourceMappingURL=runtime.test.d.ts.map
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: tests\runtime\runtime.test.d.ts.map
+────────────────────────────────────────────────────────────────────────────────
+{"version":3,"file":"runtime.test.d.ts","sourceRoot":"","sources":["runtime.test.ts"],"names":[],"mappings":""}
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: tests\runtime\runtime.test.js
+────────────────────────────────────────────────────────────────────────────────
+import { Parser } from '@graphscript/parser';
+import { Evaluator } from '@graphscript/runtime';
+describe('Runtime', () => {
+    test('evaluates simple data', () => {
+        const parser = new Parser();
+        const evaluator = new Evaluator();
+        const program = parser.parse(`data:
+  x = 1
+  y = 2
+`);
+        const values = evaluator.execute(program);
+        expect(values.x).toBe(1);
+        expect(values.y).toBe(2);
+    });
+    test('evaluates constants', () => {
+        const parser = new Parser();
+        const evaluator = new Evaluator();
+        const program = parser.parse(`const PI = 3.14`);
+        const values = evaluator.execute(program);
+        expect(values.PI).toBe(3.14);
+    });
+    test('evaluates expressions', () => {
+        const parser = new Parser();
+        const evaluator = new Evaluator();
+        const program = parser.parse(`data:
+  x = 1 + 2
+  y = 10 * 5
+  z = 2 ^ 3
+`);
+        const values = evaluator.execute(program);
+        expect(values.x).toBe(3);
+        expect(values.y).toBe(50);
+        expect(values.z).toBe(8);
+    });
+    test('evaluates function calls', () => {
+        const parser = new Parser();
+        const evaluator = new Evaluator();
+        const program = parser.parse(`data:
+  xs = range(0, 5, 1)
+`);
+        const values = evaluator.execute(program);
+        expect(values.xs).toEqual([0, 1, 2, 3, 4]);
+    });
+    test('runs algorithm with trace', () => {
+        const parser = new Parser();
+        const evaluator = new Evaluator();
+        const program = parser.parse(`algo Sum(arr):
+  total = 0
+  for x in arr:
+    total = total + x
+    emit:
+      x = x
+      total = total
+
+data:
+  result = Sum([1, 2, 3])
+`);
+        const values = evaluator.execute(program);
+        const trace = evaluator.getTrace('Sum');
+        expect(trace).toBeDefined();
+        expect(trace?.rows.length).toBe(3);
+    });
+    test('uses math functions', () => {
+        const parser = new Parser();
+        const evaluator = new Evaluator();
+        const program = parser.parse(`data:
+  s = sin(0)
+  c = cos(0)
+`);
+        const values = evaluator.execute(program);
+        expect(values.s).toBeCloseTo(0);
+        expect(values.c).toBeCloseTo(1);
+    });
+});
+//# sourceMappingURL=runtime.test.js.map
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: tests\runtime\runtime.test.js.map
+────────────────────────────────────────────────────────────────────────────────
+{"version":3,"file":"runtime.test.js","sourceRoot":"","sources":["runtime.test.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,MAAM,EAAE,MAAM,qBAAqB,CAAC;AAC7C,OAAO,EAAE,SAAS,EAAE,MAAM,sBAAsB,CAAC;AAEjD,QAAQ,CAAC,SAAS,EAAE,GAAG,EAAE;IACvB,IAAI,CAAC,uBAAuB,EAAE,GAAG,EAAE;QACjC,MAAM,MAAM,GAAG,IAAI,MAAM,EAAE,CAAC;QAC5B,MAAM,SAAS,GAAG,IAAI,SAAS,EAAE,CAAC;QAClC,MAAM,OAAO,GAAG,MAAM,CAAC,KAAK,CAAC;;;CAGhC,CAAC,CAAC;QACC,MAAM,MAAM,GAAG,SAAS,CAAC,OAAO,CAAC,OAAO,CAAC,CAAC;QAC1C,MAAM,CAAC,MAAM,CAAC,CAAC,CAAC,CAAC,IAAI,CAAC,CAAC,CAAC,CAAC;QACzB,MAAM,CAAC,MAAM,CAAC,CAAC,CAAC,CAAC,IAAI,CAAC,CAAC,CAAC,CAAC;IAC3B,CAAC,CAAC,CAAC;IAEH,IAAI,CAAC,qBAAqB,EAAE,GAAG,EAAE;QAC/B,MAAM,MAAM,GAAG,IAAI,MAAM,EAAE,CAAC;QAC5B,MAAM,SAAS,GAAG,IAAI,SAAS,EAAE,CAAC;QAClC,MAAM,OAAO,GAAG,MAAM,CAAC,KAAK,CAAC,iBAAiB,CAAC,CAAC;QAChD,MAAM,MAAM,GAAG,SAAS,CAAC,OAAO,CAAC,OAAO,CAAC,CAAC;QAC1C,MAAM,CAAC,MAAM,CAAC,EAAE,CAAC,CAAC,IAAI,CAAC,IAAI,CAAC,CAAC;IAC/B,CAAC,CAAC,CAAC;IAEH,IAAI,CAAC,uBAAuB,EAAE,GAAG,EAAE;QACjC,MAAM,MAAM,GAAG,IAAI,MAAM,EAAE,CAAC;QAC5B,MAAM,SAAS,GAAG,IAAI,SAAS,EAAE,CAAC;QAClC,MAAM,OAAO,GAAG,MAAM,CAAC,KAAK,CAAC;;;;CAIhC,CAAC,CAAC;QACC,MAAM,MAAM,GAAG,SAAS,CAAC,OAAO,CAAC,OAAO,CAAC,CAAC;QAC1C,MAAM,CAAC,MAAM,CAAC,CAAC,CAAC,CAAC,IAAI,CAAC,CAAC,CAAC,CAAC;QACzB,MAAM,CAAC,MAAM,CAAC,CAAC,CAAC,CAAC,IAAI,CAAC,EAAE,CAAC,CAAC;QAC1B,MAAM,CAAC,MAAM,CAAC,CAAC,CAAC,CAAC,IAAI,CAAC,CAAC,CAAC,CAAC;IAC3B,CAAC,CAAC,CAAC;IAEH,IAAI,CAAC,0BAA0B,EAAE,GAAG,EAAE;QACpC,MAAM,MAAM,GAAG,IAAI,MAAM,EAAE,CAAC;QAC5B,MAAM,SAAS,GAAG,IAAI,SAAS,EAAE,CAAC;QAClC,MAAM,OAAO,GAAG,MAAM,CAAC,KAAK,CAAC;;CAEhC,CAAC,CAAC;QACC,MAAM,MAAM,GAAG,SAAS,CAAC,OAAO,CAAC,OAAO,CAAC,CAAC;QAC1C,MAAM,CAAC,MAAM,CAAC,EAAE,CAAC,CAAC,OAAO,CAAC,CAAC,CAAC,EAAE,CAAC,EAAE,CAAC,EAAE,CAAC,EAAE,CAAC,CAAC,CAAC,CAAC;IAC7C,CAAC,CAAC,CAAC;IAEH,IAAI,CAAC,2BAA2B,EAAE,GAAG,EAAE;QACrC,MAAM,MAAM,GAAG,IAAI,MAAM,EAAE,CAAC;QAC5B,MAAM,SAAS,GAAG,IAAI,SAAS,EAAE,CAAC;QAClC,MAAM,OAAO,GAAG,MAAM,CAAC,KAAK,CAAC;;;;;;;;;;CAUhC,CAAC,CAAC;QACC,MAAM,MAAM,GAAG,SAAS,CAAC,OAAO,CAAC,OAAO,CAAC,CAAC;QAC1C,MAAM,KAAK,GAAG,SAAS,CAAC,QAAQ,CAAC,KAAK,CAAC,CAAC;QACxC,MAAM,CAAC,KAAK,CAAC,CAAC,WAAW,EAAE,CAAC;QAC5B,MAAM,CAAC,KAAK,EAAE,IAAI,CAAC,MAAM,CAAC,CAAC,IAAI,CAAC,CAAC,CAAC,CAAC;IACrC,CAAC,CAAC,CAAC;IAEH,IAAI,CAAC,qBAAqB,EAAE,GAAG,EAAE;QAC/B,MAAM,MAAM,GAAG,IAAI,MAAM,EAAE,CAAC;QAC5B,MAAM,SAAS,GAAG,IAAI,SAAS,EAAE,CAAC;QAClC,MAAM,OAAO,GAAG,MAAM,CAAC,KAAK,CAAC;;;CAGhC,CAAC,CAAC;QACC,MAAM,MAAM,GAAG,SAAS,CAAC,OAAO,CAAC,OAAO,CAAC,CAAC;QAC1C,MAAM,CAAC,MAAM,CAAC,CAAC,CAAC,CAAC,WAAW,CAAC,CAAC,CAAC,CAAC;QAChC,MAAM,CAAC,MAAM,CAAC,CAAC,CAAC,CAAC,WAAW,CAAC,CAAC,CAAC,CAAC;IAClC,CAAC,CAAC,CAAC;AACL,CAAC,CAAC,CAAC"}
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: tests\runtime\runtime.test.ts
+────────────────────────────────────────────────────────────────────────────────
+import { Parser } from '@graphscript/parser';
+import { Evaluator } from '@graphscript/runtime';
+
+describe('Runtime', () => {
+  test('evaluates simple data', () => {
+    const parser = new Parser();
+    const evaluator = new Evaluator();
+    const program = parser.parse(`data:
+  x = 1
+  y = 2
+`);
+    const values = evaluator.execute(program);
+    expect(values.x).toBe(1);
+    expect(values.y).toBe(2);
+  });
+
+  test('evaluates constants', () => {
+    const parser = new Parser();
+    const evaluator = new Evaluator();
+    const program = parser.parse(`const PI = 3.14`);
+    const values = evaluator.execute(program);
+    expect(values.PI).toBe(3.14);
+  });
+
+  test('evaluates expressions', () => {
+    const parser = new Parser();
+    const evaluator = new Evaluator();
+    const program = parser.parse(`data:
+  x = 1 + 2
+  y = 10 * 5
+  z = 2 ^ 3
+`);
+    const values = evaluator.execute(program);
+    expect(values.x).toBe(3);
+    expect(values.y).toBe(50);
+    expect(values.z).toBe(8);
+  });
+
+  test('evaluates function calls', () => {
+    const parser = new Parser();
+    const evaluator = new Evaluator();
+    const program = parser.parse(`data:
+  xs = range(0, 5, 1)
+`);
+    const values = evaluator.execute(program);
+    expect(values.xs).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  test('runs algorithm with trace', () => {
+    const parser = new Parser();
+    const evaluator = new Evaluator();
+    const program = parser.parse(`algo Sum(arr):
+  total = 0
+  for x in arr:
+    total = total + x
+    emit:
+      x = x
+      total = total
+
+data:
+  result = Sum([1, 2, 3])
+`);
+    const values = evaluator.execute(program);
+    const trace = evaluator.getTrace('Sum');
+    expect(trace).toBeDefined();
+    expect(trace?.rows.length).toBe(3);
+  });
+
+  test('uses math functions', () => {
+    const parser = new Parser();
+    const evaluator = new Evaluator();
+    const program = parser.parse(`data:
+  s = sin(0)
+  c = cos(0)
+`);
+    const values = evaluator.execute(program);
+    expect(values.s).toBeCloseTo(0);
+    expect(values.c).toBeCloseTo(1);
+  });
+});
+
+────────────────────────────────────────────────────────────────────────────────
+FILE: tsconfig.json
+────────────────────────────────────────────────────────────────────────────────
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "lib": ["ES2020"],
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "moduleResolution": "node"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+}
+
+================================================================================
+END OF EXPORT
+================================================================================

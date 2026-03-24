@@ -99,14 +99,13 @@ async function main(args: string[]): Promise<void> {
         const decl = value as any;
 
         if (isValidatableDeclaration(decl.type)) {
-          const elements = decl.elements || [];
-          if (elements.length > 0) {
-            const metrics = calculateReadability(elements, values, traces);
-            const score = calculateReadabilityScore(metrics);
-            const validation = validateDiagram(decl, values, traces);
+            const elements = decl.elements || [];
+            if (elements.length > 0) {
+              const metrics = calculateReadability(elements, values, traces);
+              const validation = await validateDiagram(decl, values, traces);
 
-            console.log(`\n${decl.name || name} (${decl.type}):`);
-            console.log(`  Readability Score: ${score}/100`);
+              console.log(`\n${decl.name || name} (${decl.type}):`);
+              console.log(`  Readability Score: ${validation.readabilityScore}/100`);
             console.log(`  Elements: ${metrics.elementCount}`);
             console.log(`  Min Font Size: ${metrics.minFontSize}px`);
             console.log(`  Min Element Size: ${metrics.minElementSize}px`);

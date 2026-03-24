@@ -66,7 +66,10 @@ describe('Parser', () => {
   lane classical section="classical" order=1 columns=1
   lane quantum section="quantum" order=2 columns=2
   card energy section="classical" row=1 label="Energi":
-    formula eq value="<H> = Sum_i c_i <P_i>"
+    group group1 layout="stack":
+      formula eq value="<H> = Sum_i c_i <P_i>"
+      divider cut
+      spacer gap h=18
   connector link from="energy.right" to="energy.left"
 `);
     const diagram = program.body[0] as any;
@@ -78,6 +81,9 @@ describe('Parser', () => {
       'lane',
       'card',
       'connector',
+    ]);
+    expect(diagram.elements[4].children.map((element: any) => element.type)).toEqual([
+      'group',
     ]);
   });
 });

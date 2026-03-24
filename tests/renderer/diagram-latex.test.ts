@@ -38,4 +38,18 @@ describe('Diagram LaTeX rendering', () => {
     expect(svg).toContain('viewBox=');
     expect(svg).toContain('theta');
   });
+
+  test('auto normalizes shorthand quantum notation for formulas and text', async () => {
+    const svg = await render(`diagram "Latex":
+  width = 900
+  height = 420
+  panel output x=120 y=90 w=660 h=180 label="State |psi(theta)>" subtitle="Nilai Ekspektasi <P_i>"
+  formula eq x=450 y=320 value="<H> = Sum_i c_i <P_i>"
+`);
+
+    expect(svg).toContain('viewBox=');
+    expect(svg).toContain('data-latex');
+    expect(svg).toContain('\\langle H \\rangle');
+    expect(svg).toContain('\\psi');
+  });
 });

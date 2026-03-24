@@ -16,7 +16,7 @@ export async function renderDiagram(decl: DiagramDeclaration, values: Record<str
   const background = readString(resolveValue(decl.properties.background, values, traces), '#f8fafc');
   const title = readString(resolveValue(decl.properties.title, values, traces), decl.name);
   const subtitle = readString(resolveValue(decl.properties.subtitle, values, traces), '');
-  const compiled = compileSemanticDiagram(decl.elements, values, traces, width, requestedHeight);
+  const compiled = await compileSemanticDiagram(decl.elements, values, traces, width, requestedHeight);
   const height = Math.max(requestedHeight, compiled.minHeight);
 
   let body = '';

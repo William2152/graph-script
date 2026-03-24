@@ -52,7 +52,7 @@ export class Renderer {
       let report: ValidationReport | null = null;
 
       if (!skipValidation && isValidatableDeclaration(decl.type)) {
-        const result = validateAndAdjust(decl, values, traces);
+        const result = await validateAndAdjust(decl, values, traces);
         declToRender = result.adjustedDecl;
         report = result.report;
 

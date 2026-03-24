@@ -17,20 +17,22 @@ Split large files into smaller, more maintainable modules without changing any f
 
 ## Current State Analysis
 
-### Files Exceeding 300 Lines (Updated)
+### Files Exceeding 300 Lines (Latest)
 
-| File | Lines | Category |
-|------|-------|----------|
-| `src/renderer/diagram-semantic.ts` | 1077 | Renderer |
-| `src/parser/index.ts` | 874 | Parser |
-| `src/renderer/validator.ts` | 687 | Renderer |
-| `src/parser/declarations.ts` | 645 | Parser |
-| `src/renderer/flow.ts` | 617 | Renderer |
-| `src/renderer/latex.ts` | 554 | Renderer |
-| `src/renderer/chart.ts` | 517 | Renderer |
-| `src/ast/types.ts` | 460 | AST |
-| `src/renderer/diagram.ts` | 368 | Renderer |
-| `src/parser/statements.ts` | 349 | Parser |
+| File | Lines | Category | Status |
+|------|-------|----------|--------|
+| `src/renderer/diagram-semantic.ts` | 1077 | Renderer | Needs split |
+| `src/parser/index.ts` | 874 | Parser | Needs split |
+| `src/renderer/validator.ts` | ~1065 | Renderer | **CHANGED** - User already modified |
+| `src/parser/declarations.ts` | 645 | Parser | Needs split |
+| `src/renderer/flow.ts` | 617 | Renderer | Needs split |
+| `src/renderer/latex.ts` | 554 | Renderer | **CHANGED** - User already modified |
+| `src/renderer/chart.ts` | 517 | Renderer | Needs split |
+| `src/ast/types.ts` | 460 | AST | Needs split |
+| `src/renderer/diagram.ts` | 368 | Renderer | **CHANGED** - User already modified |
+| `src/parser/statements.ts` | 349 | Parser | Needs split |
+
+> **Note**: Beberapa file sudah dimodifikasi user (validator.ts, latex.ts, diagram.ts). Data di atas mencerminkan line count terbaru.
 
 ### Files Within Limit (Keep As Is)
 
@@ -115,47 +117,27 @@ diff baseline-output.txt final-output.txt
 
 ## Phase 2: Renderer - Validator
 
-### Target: `src/renderer/validator.ts` (687 → 5 files)
+### Target: `src/renderer/validator.ts` (~1065 lines)
 
-**Current Exports:**
-```typescript
-export const OVERLAP_TOLERANCE = 5;
-export const MAX_RETRIES = 5;
-export const MIN_FONT_SIZE = 10;
-export const MIN_ELEMENT_SIZE = 20;
-
-export interface BoundingBox { ... }
-export interface OverlapIssue { ... }
-export interface ValidationResult { ... }
-export interface ReadabilityMetrics { ... }
-export interface ValidationReport { ... }
-export interface RelayoutStrategy { ... }
-
-export function isValidatableDeclaration(declType: string): boolean
-export function needsRelayout(declType: string): boolean
-export function extractBoundingBoxes(...)
-export function isIntendedOverlap(...)
-export function calculateOverlap(...)
-export function detectOverlaps(...)
-export function calculateReadability(...)
-export function calculateReadabilityScore(...)
-export function attemptRelayout(...)
-export function generateReport(...)
-export function writeValidationReport(...)
-export function validateAndAdjust(...)
-export function validateDiagram(...)
-```
+> **Note**: File ini sudah dimodifikasi user dengan penambahan fitur:
+> - MIN_FONT_SIZE berubah dari 10 ke 14
+> - Ditambah: MIN_LAYOUT_GAP, EXCESSIVE_GAP_MULTIPLIER
+> - Ditambah: ValidationIssue interface dengan kind types
+> - Ditambah: validation_ignore property
+> - Ditambah: detectSiblingGapIssues, detectAwkwardSpacingIssues, detectConnectorCrossPanelIssues
+> - Ditambah: connector/panel crossing validation
+> - Import dari diagram-semantic dan flow
 
 **Proposed Split:**
 
 | New File | Lines | Content |
 |----------|-------|---------|
-| `src/renderer/validator/index.ts` | ~60 | Barrel exports, validateAndAdjust |
-| `src/renderer/validator/types.ts` | ~120 | All interfaces and constants |
-| `src/renderer/validator/detection.ts` | ~200 | extractBoundingBoxes, detectOverlaps, calculateOverlap |
-| `src/renderer/validator/readability.ts` | ~120 | calculateReadability, calculateReadabilityScore |
-| `src/renderer/validator/relayout.ts` | ~150 | attemptRelayout, re-layout strategies |
-| `src/renderer/validator/report.ts` | ~120 | generateReport, writeValidationReport |
+| `src/renderer/validator/index.ts` | ~80 | Barrel exports, validateAndAdjust |
+| `src/renderer/validator/types.ts` | ~150 | All interfaces and constants |
+| `src/renderer/validator/detection.ts` | ~250 | extractBoundingBoxes, detectOverlaps, gap detection |
+| `src/renderer/validator/readability.ts` | ~150 | calculateReadability, calculateReadabilityScore |
+| `src/renderer/validator/relayout.ts` | ~200 | attemptRelayout, re-layout strategies |
+| `src/renderer/validator/report.ts` | ~150 | generateReport, writeValidationReport |
 
 ---
 
@@ -184,7 +166,9 @@ export function isSemanticDiagramElement(...)
 
 ## Phase 4: Renderer - Latex
 
-### Target: `src/renderer/latex.ts` (554 → 2-3 files)
+### Target: `src/renderer/latex.ts` (554 lines)
+
+> **Note**: File ini sudah dimodifikasi user.
 
 **Proposed Split:**
 
@@ -226,7 +210,9 @@ export function isSemanticDiagramElement(...)
 
 ## Phase 7: Renderer - Diagram
 
-### Target: `src/renderer/diagram.ts` (368 → 2 files)
+### Target: `src/renderer/diagram.ts` (368 lines)
+
+> **Note**: File ini sudah dimodifikasi user.
 
 **Proposed Split:**
 
@@ -418,6 +404,21 @@ If any refactor breaks functionality:
 
 ---
 
+## Current Issues
+
+### TypeScript Errors in validator.ts
+
+File `src/renderer/validator.ts` saat ini memiliki error TypeScript:
+- `absoluteBox` - undefined
+- `boxGap` - undefined  
+- `verticalGap` - undefined (seharusnya `vertical`)
+- `collectConnectorSegments` - undefined
+- `segmentIntersectsPanel` - undefined
+
+Ini perlu diperbaiki sebelum melakukan refactoring lebih lanjut.
+
+---
+
 ## Handoff Notes
 
 This spec is ready for implementation. Each refactor should:
@@ -426,5 +427,10 @@ This spec is ready for implementation. Each refactor should:
 3. Update imports in dependent files
 4. Run tests to verify
 5. Delete old large file
+
+**Important Notes:**
+- Beberapa file sudah dimodifikasi user (validator.ts, latex.ts, diagram.ts)
+- Perlu fix TypeScript errors di validator.ts terlebih dahulu
+- Verifikasi build berhasil sebelum refactoring
 
 All public APIs must remain identical for 100% backward compatibility.

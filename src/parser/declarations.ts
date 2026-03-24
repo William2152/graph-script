@@ -462,6 +462,11 @@ export class DeclarationParser {
     if (nameToken.type === 'STRING') this.advance();
 
     this.skipNewlines();
+    if (this.check('COLON')) {
+      this.advance();
+      this.skipNewlines();
+    }
+
     const properties = this.parseBlockProperties();
 
     return {

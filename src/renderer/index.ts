@@ -1,9 +1,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { FlowDeclaration, ChartDeclaration } from '../ast/types';
+import { FlowDeclaration, ChartDeclaration, TableDeclaration, Plot3dDeclaration } from '../ast/types';
 import { GSValue, Trace } from '../runtime/values';
 import { renderBarChart, renderLineChart, extractChartConfig, extractDataSeries } from './chart';
 import { layoutFlow, renderFlow } from './flow';
+import { buildTableData, renderTable } from './table';
+import { buildPlot3d, renderPlot3d } from './plot3d';
 
 export interface RenderOptions {
   outputDir?: string;
@@ -35,6 +37,10 @@ export class Renderer {
           this.renderFlow(name, decl as FlowDeclaration, outputDir);
         } else if (decl.type === 'ChartDeclaration') {
           this.renderChart(name, decl as ChartDeclaration, values, traces, outputDir);
+        } else if (decl.type === 'TableDeclaration') {
+          this.renderTable(name, decl as TableDeclaration, values, traces, outputDir);
+        } else if (decl.type === 'Plot3dDeclaration') {
+          this.renderPlot3d(name, decl as Plot3dDeclaration, values, traces, outputDir);
         }
       }
     }
@@ -137,5 +143,37 @@ export class Renderer {
     const outputPath = path.join(outputDir, `${name}-trace.svg`);
     fs.writeFileSync(outputPath, svg, 'utf-8');
     console.log(`Rendered trace chart: ${outputPath}`);
+  }
+
+  private renderTable(
+    name: string,
+    table: TableDeclaration,
+    values: Record<string, GSValue>,
+    traces: Map<string, Trace>,
+    outputDir: string
+  ): void {
+    const tableData = buildTableData(table, values, traces);
+    if (tableData.columns.length === 0 && tableData.rows.length === 0) return;
+
+    const svg = renderTable(tableData);
+    const outputPath = path.join(outputDir, `${name}.svg`);
+    fs.writeFileSync(outputPath, svg, 'utf-8');
+    console.log(`Rendered table: ${outputPath}`);
+  }
+
+  private renderPlot3d(
+    name: string,
+    plot3d: Plot3dDeclaration,
+    values: Record<string, GSValue>,
+    traces: Map<string, Trace>,
+    outputDir: string
+  ): void {
+    const { config, series } = buildPlot3d(plot3d, values, traces);
+    if (!series) return;
+
+    const svg = renderPlot3d(config, series);
+    const outputPath = path.join(outputDir, `${name}.svg`);
+    fs.writeFileSync(outputPath, svg, 'utf-8');
+    console.log(`Rendered plot3d: ${outputPath}`);
   }
 }

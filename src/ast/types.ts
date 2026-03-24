@@ -57,6 +57,7 @@ export type TopLevelNode =
   | SubDeclaration
   | ComponentDeclaration
   | AlgoDeclaration
+  | PseudoDeclaration
   | ChartDeclaration
   | FlowDeclaration
   | DiagramDeclaration
@@ -141,6 +142,13 @@ export interface AlgoDeclaration {
   name: string;
   params: string[];
   body: Statement[];
+  location: SourceLocation;
+}
+
+export interface PseudoDeclaration {
+  type: 'PseudoDeclaration';
+  name: string;
+  lines: string[];
   location: SourceLocation;
 }
 

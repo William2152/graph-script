@@ -27,6 +27,7 @@ import { buildTableData, renderTable } from './table';
 export interface RenderOptions {
   outputDir?: string;
   format?: 'svg';
+  baseDir?: string;
 }
 
 export class Renderer {
@@ -34,18 +35,19 @@ export class Renderer {
 
   render(values: Record<string, GSValue>, traces: Map<string, Trace>, options: RenderOptions = {}): void {
     const outputDir = options.outputDir || this.options.outputDir || './output';
+    const baseDir = options.baseDir || this.options.baseDir || process.cwd();
     fs.mkdirSync(outputDir, { recursive: true });
 
     for (const [name, value] of Object.entries(values)) {
       if (!value || typeof value !== 'object') continue;
       const decl = value as any;
-      const svg = this.renderDeclaration(name, decl, values, traces);
+      const svg = this.renderDeclaration(name, decl, values, traces, baseDir);
       if (!svg) continue;
       this.writeSvg(decl.name || name, svg, outputDir, decl.type.replace('Declaration', '').toLowerCase());
     }
   }
 
-  renderDeclaration(name: string, decl: any, values: Record<string, GSValue>, traces: Map<string, Trace>): string | null {
+  renderDeclaration(name: string, decl: any, values: Record<string, GSValue>, traces: Map<string, Trace>, baseDir: string = this.options.baseDir || process.cwd()): string | null {
     if (!decl || typeof decl !== 'object') return null;
     switch (decl.type) {
       case 'ChartDeclaration': {
@@ -64,7 +66,13 @@ export class Renderer {
       case 'PseudoDeclaration':
         return renderPseudoBlock(decl as PseudoDeclaration);
       case 'DiagramDeclaration':
-        return renderDiagram(decl as DiagramDeclaration, values, traces, (target) => this.findAndRenderTarget(target, values, traces));
+        return renderDiagram(
+          decl as DiagramDeclaration,
+          values,
+          traces,
+          (target) => this.findAndRenderTarget(target, values, traces, baseDir),
+          baseDir,
+        );
       case 'Scene3dDeclaration':
         return renderScene3d(decl as Scene3dDeclaration, values, traces);
       case 'ErdDeclaration':
@@ -72,21 +80,21 @@ export class Renderer {
       case 'InfraDeclaration':
         return renderInfra(decl as InfraDeclaration, values, traces);
       case 'PageDeclaration':
-        return renderPage(decl as PageDeclaration, values, traces, (target) => this.findAndRenderTarget(target, values, traces));
+        return renderPage(decl as PageDeclaration, values, traces, (target) => this.findAndRenderTarget(target, values, traces, baseDir));
       default:
         return null;
     }
   }
 
-  private findAndRenderTarget(target: string, values: Record<string, GSValue>, traces: Map<string, Trace>): string | null {
+  private findAndRenderTarget(target: string, values: Record<string, GSValue>, traces: Map<string, Trace>, baseDir: string): string | null {
     const direct = values[target];
     if (direct && typeof direct === 'object') {
-      return this.renderDeclaration(target, direct, values, traces);
+      return this.renderDeclaration(target, direct, values, traces, baseDir);
     }
 
     for (const [name, value] of Object.entries(values)) {
       if (value && typeof value === 'object' && (value as any).name === target) {
-        return this.renderDeclaration(name, value, values, traces);
+        return this.renderDeclaration(name, value, values, traces, baseDir);
       }
     }
     return null;

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import * as fs from 'fs';
+import * as path from 'path';
 import { Parser } from './parser';
 import { Evaluator } from './runtime';
 import { Renderer } from './renderer';
@@ -56,6 +57,7 @@ function main(args: string[]): void {
   }
 
   const source = fs.readFileSync(options.file, 'utf-8');
+  const baseDir = path.dirname(path.resolve(options.file));
   try {
     const parser = new Parser();
     const program = parser.parse(source);
@@ -84,9 +86,9 @@ function main(args: string[]): void {
       return;
     }
 
-    const renderer = new Renderer({ outputDir: options.outputDir || './output' });
+    const renderer = new Renderer({ outputDir: options.outputDir || './output', baseDir });
     console.log('\nRendering...');
-    renderer.render(values, evaluator.getTraces(), { outputDir: options.outputDir || './output' });
+    renderer.render(values, evaluator.getTraces(), { outputDir: options.outputDir || './output', baseDir });
     console.log('✓ Render: Complete');
   } catch (error: any) {
     console.error(`\n✗ Error: ${error.message}`);

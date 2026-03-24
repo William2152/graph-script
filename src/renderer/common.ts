@@ -101,6 +101,15 @@ export function resolveValue(expr: Expression | undefined, values: Record<string
           return `cell(${args.join(',')})`;
         case 'grid':
           return { type: 'grid', args };
+        case 'image': {
+          const rawPath = typeof args[0] === 'string' ? args[0] : String(args[0] ?? '');
+          const format = rawPath.includes('.') ? rawPath.split('.').pop()?.toLowerCase() : undefined;
+          return {
+            type: 'imageAsset',
+            path: rawPath,
+            format,
+          };
+        }
         default:
           return undefined;
       }
@@ -171,4 +180,38 @@ export function wrapText(text: string, maxChars: number, maxLines = 3): string[]
     limited[lastIndex] = `${base}...`;
   }
   return limited;
+}
+
+export function looksLikeFormula(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  if ((trimmed.startsWith('$') && trimmed.endsWith('$')) || (trimmed.startsWith('\\(') && trimmed.endsWith('\\)'))) return true;
+  if (/\\[A-Za-z]+/.test(trimmed)) return true;
+  if ((/[_^{}]/.test(trimmed) || /=/.test(trimmed)) && !/\s{2,}/.test(trimmed)) return true;
+  return false;
+}
+
+export function normalizeFormulaText(text: string): string {
+  const trimmed = text.trim();
+  if (trimmed.startsWith('$') && trimmed.endsWith('$')) return trimmed.slice(1, -1);
+  if (trimmed.startsWith('\\(') && trimmed.endsWith('\\)')) return trimmed.slice(2, -2);
+  return trimmed;
+}
+
+export function renderFormulaText(
+  value: string,
+  x: number,
+  y: number,
+  options: {
+    fontSize?: number;
+    color?: string;
+    anchor?: 'start' | 'middle' | 'end';
+    weight?: string;
+  } = {},
+): string {
+  const fontSize = options.fontSize ?? 22;
+  const color = options.color ?? '#0f172a';
+  const anchor = options.anchor ?? 'middle';
+  const weight = options.weight ?? '500';
+  return `<text x="${round(x)}" y="${round(y)}" text-anchor="${anchor}" font-size="${round(fontSize)}" font-style="italic" font-weight="${weight}" fill="${color}">${escapeXml(normalizeFormulaText(value))}</text>`;
 }

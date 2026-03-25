@@ -94,6 +94,39 @@ diagram "Semantic":
     expect(segments[segments.length - 1].type).toBe('arrow');
   });
 
+  test('staggered connector corridors avoid reusing the same middle track', async () => {
+    const { decl, values, traces } = parseAndEval(`diagram "Semantic":
+  width = 1280
+  height = 820
+  header top title="Header"
+  separator split labels=["Left", "Right"]
+  lane left section="left" order=1 ratio=0.5 columns=1
+  lane right section="right" order=2 ratio=0.5 columns=1
+  card a section="left" row=1 label="A":
+    text t value="Alpha"
+  card b section="left" row=2 label="B":
+    text t value="Beta"
+  card c section="right" row=1 label="C":
+    text t value="Gamma"
+  card d section="right" row=2 label="D":
+    text t value="Delta"
+  connector upper from="a.right" to="d.left" label="Loop A"
+  connector lower from="b.right" to="c.left" label="Loop B"
+`);
+
+    const compiled = await compileSemanticDiagram(decl.elements, values as any, traces, 1280, 820);
+    const upperVertical = compiled.elements
+      .filter((element) => element.name.startsWith('upper-seg-'))
+      .find((element) => (element.properties.x as any).value === (element.properties.x2 as any).value);
+    const lowerVertical = compiled.elements
+      .filter((element) => element.name.startsWith('lower-seg-'))
+      .find((element) => (element.properties.x as any).value === (element.properties.x2 as any).value);
+
+    expect(upperVertical).toBeDefined();
+    expect(lowerVertical).toBeDefined();
+    expect((upperVertical!.properties.x as any).value).not.toBe((lowerVertical!.properties.x as any).value);
+  });
+
   test('semantic rendering grows canvas height when needed', async () => {
     const { decl, values, traces } = parseAndEval(`diagram "Semantic":
   width = 1200

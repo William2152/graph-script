@@ -9,7 +9,9 @@
 Fixed the actual layout problems instead of just lowering validation standards:
 
 1. **Formula overflow**: Constrained formula width to card inner width
-2. **Connector label overlap**: Added collision detection and repositioning logic
+2. **Connector label overlap**: Added smart label placement with collision detection
+3. **Connector routing**: Implemented staggered corridors to avoid reusing same paths
+4. **Image border**: Added stroke-linecap/stroke-linejoin for better rendering
 
 ## Problem (Original)
 
@@ -27,26 +29,26 @@ Got validation errors:
 
 1. **Formula not constrained**: Formula elements were measured without limiting to card's inner width
 2. **Connector label position**: Label was placed at midpoint without checking for card collisions
+3. **No routing context**: Connectors were processed without awareness of other connectors
 
-## Solution (Proper Fix)
+## Solution (Comprehensive Implementation)
 
 ### Files Changed
 
+**`src/renderer/diagram.ts`**:
+- Added `stroke-linecap="round" stroke-linejoin="round"` to image border rect
+
 **`src/renderer/diagram-semantic.ts`**:
+- Added new interfaces: `BoxArea`, `ConnectorSegmentObstacle`, `ConnectorRoutingContext`
+- Extended `ConnectorPath` with `labelSegmentStart` and `labelSegmentEnd`
+- Added `estimateConnectorPriority()` for sorting connectors
+- Added `placeConnectorLabel()` for smart label positioning with multiple candidates
+- Added `spreadConnectorPath()` to separate parallel connectors
+- Added corridor candidates functions for multi-path routing
+- Added collision detection helpers: `segmentHitsBox`, `expandBox`, `scoreSegmentInteraction`
 
-1. **Formula constraint** (around line 669):
-```typescript
-// Before:
-const width = Math.max(metrics.width, 48);
-
-// After:
-const constrainedWidth = Math.min(Math.max(metrics.width, 48), maxWidth);
-```
-
-2. **Connector label collision** (around line 841):
-- Added loop to check if label overlaps with any card
-- If overlap detected, reposition label above or below cards
-- Added `boxesOverlap()` helper function
+**`tests/renderer/diagram-semantic.test.ts`**:
+- Added test for staggered connector corridors
 
 ## Results
 
@@ -84,6 +86,7 @@ node dist/cli.js check temp/fig-4-16-vqe-measurement.gs
 - [x] No element overlaps
 - [x] Formulas fit within card bounds
 - [x] Connector labels positioned correctly
+- [x] Connectors use staggered corridors
 
 ## Related Spec
 

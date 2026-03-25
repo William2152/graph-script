@@ -267,7 +267,7 @@ async function renderElement(element: DiagramElement, values: Record<string, GSV
       }
       svg += `<image href="${escapeXml(href)}" x="${round(x)}" y="${round(y)}" width="${round(w)}" height="${round(h)}" preserveAspectRatio="${preserveAspectRatio}" opacity="${round(imageOpacity, 3)}"${clipAttr}/>`;
       if (stroke && stroke !== 'none' && strokeWidth > 0) {
-        svg += `<rect x="${round(x)}" y="${round(y)}" width="${round(w)}" height="${round(h)}" rx="${radius}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}"${dashAttr}${strokeOpacityAttr}/>`;
+        svg += `<rect x="${round(x)}" y="${round(y)}" width="${round(w)}" height="${round(h)}" rx="${radius}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round"${dashAttr}${strokeOpacityAttr}/>`;
       }
       break;
     }

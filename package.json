@@ -28,7 +28,8 @@
   "license": "MIT",
   "dependencies": {
     "@mathjax/src": "^4.1.1",
-    "mathjax": "^4.1.1"
+    "mathjax": "^4.1.1",
+    "sharp": "^0.33.2"
   },
   "devDependencies": {
     "@types/jest": "^29.5.12",

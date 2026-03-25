@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import sharp from 'sharp';
 import {
   ChartDeclaration,
   DiagramDeclaration,
@@ -27,7 +28,9 @@ import { isValidatableDeclaration, validateAndAdjust, writeValidationReport, Val
 
 export interface RenderOptions {
   outputDir?: string;
-  format?: 'svg';
+  format?: 'svg' | 'png' | 'jpg';
+  scale?: number;
+  quality?: number;
   baseDir?: string;
   skipValidation?: boolean;
   validationReport?: boolean;
@@ -41,6 +44,9 @@ export class Renderer {
     const baseDir = options.baseDir || this.options.baseDir || process.cwd();
     const skipValidation = options.skipValidation ?? this.options.skipValidation ?? false;
     const generateReport = options.validationReport ?? this.options.validationReport ?? false;
+    const format = options.format ?? this.options.format ?? 'svg';
+    const scale = options.scale ?? this.options.scale ?? 1;
+    const quality = options.quality ?? this.options.quality ?? 90;
 
     fs.mkdirSync(outputDir, { recursive: true });
 
@@ -68,7 +74,7 @@ export class Renderer {
 
       const svg = await this.renderDeclaration(name, declToRender, values, traces, baseDir);
       if (!svg) continue;
-      this.writeSvg(declToRender.name || name, svg, outputDir, declToRender.type.replace('Declaration', '').toLowerCase());
+      await this.writeOutput(declToRender.name || name, svg, outputDir, declToRender.type.replace('Declaration', '').toLowerCase(), format, scale, quality);
     }
   }
 
@@ -125,10 +131,49 @@ export class Renderer {
     return null;
   }
 
-  private writeSvg(name: string, svg: string, outputDir: string, kind: string): void {
-    const outputPath = path.join(outputDir, `${sanitizeFileName(name)}.svg`);
-    fs.writeFileSync(outputPath, svg, 'utf-8');
-    console.log(`Rendered ${kind}: ${outputPath}`);
+  private async writeOutput(name: string, svg: string, outputDir: string, kind: string, format: 'svg' | 'png' | 'jpg', scale: number, quality: number): Promise<void> {
+    const baseName = sanitizeFileName(name);
+    
+    if (format === 'svg') {
+      const outputPath = path.join(outputDir, `${baseName}.svg`);
+      fs.writeFileSync(outputPath, svg, 'utf-8');
+      console.log(`Rendered ${kind}: ${outputPath}`);
+      return;
+    }
+
+    try {
+      const width = this.extractSvgWidth(svg);
+      const height = this.extractSvgHeight(svg);
+      const scaledWidth = Math.round(width * scale);
+      const scaledHeight = Math.round(height * scale);
+
+      let sharpInstance = sharp(Buffer.from(svg)).resize(scaledWidth, scaledHeight);
+
+      if (format === 'png') {
+        const outputPath = path.join(outputDir, `${baseName}.png`);
+        await sharpInstance.png().toFile(outputPath);
+        console.log(`Rendered ${kind}: ${outputPath}`);
+      } else if (format === 'jpg') {
+        const outputPath = path.join(outputDir, `${baseName}.jpg`);
+        await sharpInstance.jpeg({ quality }).toFile(outputPath);
+        console.log(`Rendered ${kind}: ${outputPath}`);
+      }
+    } catch (error) {
+      console.error(`Error converting to ${format}:`, error);
+      const outputPath = path.join(outputDir, `${baseName}.svg`);
+      fs.writeFileSync(outputPath, svg, 'utf-8');
+      console.log(`Fallback to SVG: ${outputPath}`);
+    }
+  }
+
+  private extractSvgWidth(svg: string): number {
+    const match = svg.match(/width="(\d+)"/);
+    return match ? parseInt(match[1], 10) : 800;
+  }
+
+  private extractSvgHeight(svg: string): number {
+    const match = svg.match(/height="(\d+)"/);
+    return match ? parseInt(match[1], 10) : 600;
   }
 }
 

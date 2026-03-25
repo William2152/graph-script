@@ -13,6 +13,9 @@ interface CliOptions {
   outputDir?: string;
   skipValidation?: boolean;
   validationReport?: boolean;
+  format?: 'svg' | 'png' | 'jpg';
+  scale?: number;
+  quality?: number;
 }
 
 function parseArgs(args: string[]): CliOptions | null {
@@ -23,6 +26,9 @@ function parseArgs(args: string[]): CliOptions | null {
   let outputDir: string | undefined;
   let skipValidation = false;
   let validationReport = false;
+  let format: 'svg' | 'png' | 'jpg' | undefined;
+  let scale: number | undefined;
+  let quality: number | undefined;
 
   for (let i = 0; i < rest.length; i += 1) {
     if (rest[i] === '--output' || rest[i] === '-o') {
@@ -32,10 +38,28 @@ function parseArgs(args: string[]): CliOptions | null {
       skipValidation = true;
     } else if (rest[i] === '--validation-report') {
       validationReport = true;
+    } else if (rest[i] === '--format') {
+      const fmt = rest[i + 1];
+      if (['svg', 'png', 'jpg'].includes(fmt)) {
+        format = fmt as 'svg' | 'png' | 'jpg';
+      }
+      i += 1;
+    } else if (rest[i] === '--scale') {
+      const s = parseFloat(rest[i + 1]);
+      if (!isNaN(s) && s > 0) {
+        scale = s;
+      }
+      i += 1;
+    } else if (rest[i] === '--quality') {
+      const q = parseInt(rest[i + 1], 10);
+      if (!isNaN(q) && q >= 1 && q <= 100) {
+        quality = q;
+      }
+      i += 1;
     }
   }
 
-  return { command: command as CliOptions['command'], file, outputDir, skipValidation, validationReport };
+  return { command: command as CliOptions['command'], file, outputDir, skipValidation, validationReport, format, scale, quality };
 }
 
 function printUsage(): void {
@@ -48,17 +72,23 @@ Usage:
 Commands:
   check <file.gs>     Parse, validate, and check readability
   run <file.gs>       Run algorithms and display traces
-  render <file.gs>    Render charts and flows to SVG (with auto-validation)
+  render <file.gs>    Render charts and flows (with auto-validation)
 
 Options:
   --output <dir>           Output directory for render command (default: ./output)
   --skip-validation        Skip overlap validation during render
   --validation-report      Generate detailed validation JSON report
+  --format <svg|png|jpg>  Output format (default: svg)
+  --scale <number>         Scale factor for PNG/JPG (default: 1)
+  --quality <1-100>        JPEG quality (default: 90)
 
 Examples:
   graphscript check demo.gs
   graphscript run demo.gs
   graphscript render demo.gs -o ./dist
+  graphscript render demo.gs --format png
+  graphscript render demo.gs --format jpg --quality 80
+  graphscript render demo.gs --format png --scale 2
   graphscript render demo.gs --validation-report
   graphscript render demo.gs --skip-validation
 `);
@@ -170,6 +200,9 @@ async function main(args: string[]): Promise<void> {
       baseDir,
       skipValidation: options.skipValidation,
       validationReport: options.validationReport,
+      format: options.format,
+      scale: options.scale,
+      quality: options.quality,
     });
     console.log('\nRendering...');
     await renderer.render(values, evaluator.getTraces(), {
@@ -177,6 +210,9 @@ async function main(args: string[]): Promise<void> {
       baseDir,
       skipValidation: options.skipValidation,
       validationReport: options.validationReport,
+      format: options.format,
+      scale: options.scale,
+      quality: options.quality,
     });
     console.log('✓ Render: Complete');
   } catch (error: any) {

@@ -94,6 +94,7 @@ interface ChildLayout {
 }
 
 interface CardMeasurement {
+  width: number;
   height: number;
   children: DiagramElement[];
 }
@@ -182,8 +183,41 @@ export async function compileSemanticDiagram(
     cursorY += headerHeight + Math.max(CARD_GAP_MIN, getNumber(header, values, traces, 'gap', 26));
   }
 
-  const lanes = resolveLanes(laneElements, separator, values, traces, contentX, cursorY, contentWidth, height);
+  let lanes = resolveLanes(laneElements, separator, values, traces, contentX, cursorY, contentWidth, height);
   const separatorHeight = separator ? Math.max(40, getNumber(separator, values, traces, 'h', 46)) : 0;
+  const separatorGap = separator ? Math.max(CARD_GAP_MIN, getNumber(separator, values, traces, 'gap', 30)) : 0;
+  const laneTop = cursorY + separatorHeight + separatorGap;
+  for (const lane of lanes) {
+    lane.frame.y = laneTop;
+    lane.frame.h = Math.max(0, lane.frame.h - laneTop);
+  }
+
+  let cards = await layoutCards(cardElements, lanes, values, traces);
+  lanes = compactLaneFrames(lanes, cards, contentX, contentWidth, separator ? 80 : 48);
+  for (const lane of lanes) {
+    lane.frame.y = laneTop;
+    lane.frame.h = Math.max(0, height - laneTop);
+  }
+  cards = await layoutCards(cardElements, lanes, values, traces);
+  let contentBottom = Math.max(laneTop, ...cards.map((card) => card.y + card.height));
+  const packedLeft = lanes.length ? Math.min(...lanes.map((lane) => lane.frame.x)) : contentX;
+  const packedRight = lanes.length ? Math.max(...lanes.map((lane) => lane.frame.x + lane.frame.w)) : contentX + contentWidth;
+  const packedCenterX = (packedLeft + packedRight) / 2;
+
+  if (header) {
+    const headerBg = compiled.find((element) => element.name === `${header.name}-bg`);
+    const headerTitle = compiled.find((element) => element.name === `${header.name}-title`);
+    const headerWidth = Math.max(320, packedRight - packedLeft);
+    if (headerBg) {
+      headerBg.properties.x = expr(packedLeft);
+      headerBg.properties.w = expr(headerWidth);
+    }
+    if (headerTitle) {
+      headerTitle.properties.x = expr(packedCenterX);
+      headerTitle.properties.w = expr(Math.max(240, headerWidth - 48));
+    }
+  }
+
   if (separator) {
     const size = Math.max(CARD_TITLE_MIN + 2, getNumber(separator, values, traces, 'size', 22));
     const color = getString(separator, values, traces, 'color', '#333333');
@@ -211,27 +245,17 @@ export async function compileSemanticDiagram(
         color,
       }));
     }
-    cursorY += separatorHeight + Math.max(CARD_GAP_MIN, getNumber(separator, values, traces, 'gap', 30));
   }
-
-  const laneTop = cursorY;
-  for (const lane of lanes) {
-    lane.frame.y = laneTop;
-    lane.frame.h = Math.max(0, lane.frame.h - laneTop);
-  }
-
-  const cards = await layoutCards(cardElements, lanes, values, traces);
-  let contentBottom = Math.max(laneTop, ...cards.map((card) => card.y + card.height));
 
   if (separator) {
     const separatorStroke = getString(separator, values, traces, 'stroke', '#a0a0a0');
     const dash = getString(separator, values, traces, 'dash', '10 12');
     const strokeWidth = getNumber(separator, values, traces, 'strokeWidth', 3);
     lanes.slice(0, -1).forEach((lane, index) => {
-      const dividerX = lane.frame.x + lane.frame.w;
+      const dividerX = lane.frame.x + lane.frame.w + 40;
       compiled.push(element('line', `${separator.name}-divider-${index + 1}`, {
         x: dividerX,
-        y: cursorY - separatorHeight + 6,
+        y: cursorY + 6,
         x2: dividerX,
         y2: contentBottom + 18,
         stroke: separatorStroke,
@@ -249,7 +273,7 @@ export async function compileSemanticDiagram(
     const block = await measureRichTextBlock(loopValue, {
       x: width / 2,
       y: 0,
-      maxWidth: Math.max(240, contentWidth * 0.35),
+      maxWidth: Math.max(240, (packedRight - packedLeft) * 0.35),
       fontSize: loopSize,
       weight: getString(loopLabel, values, traces, 'weight', '800'),
       anchor: 'middle',
@@ -259,7 +283,7 @@ export async function compileSemanticDiagram(
     compiled.push(element('text', `${loopLabel.name}-text`, {
       x: width / 2,
       y: (laneTop + contentBottom) / 2 - block.height / 2,
-      w: Math.max(240, contentWidth * 0.35),
+      w: Math.max(240, (packedRight - packedLeft) * 0.35),
       h: block.height,
       anchor: 'middle',
       value: loopValue,
@@ -289,10 +313,12 @@ export async function compileSemanticDiagram(
     })
     .filter((value) => Number.isFinite(value)));
 
+  const bounds = measureSemanticBounds(compiled, values, traces);
+
   return {
     elements: [...compiled, ...plain],
-    minWidth: width,
-    minHeight: Math.max(height, contentBottom + outerPadBottom),
+    minWidth: Math.max(640, Math.min(width, bounds.maxX + outerPadX)),
+    minHeight: Math.max(320, bounds.maxY + outerPadBottom),
     hasSemantic: true,
   };
 }
@@ -385,11 +411,22 @@ async function layoutCards(
       const rowSpan = Math.max(1, getNumber(card, values, traces, 'row_span', 1));
       maxRow = Math.max(maxRow, row + rowSpan - 1);
       const slotWidth = columnWidth * span + lane.gapX * (span - 1);
+      const hasExplicitWidth = card.properties.w != null;
       const preferredWidth = readNumber(resolveValue(card.properties.w, values, traces), slotWidth);
       const minWidth = getNumber(card, values, traces, 'min_w', 0);
       const boundedMinWidth = minWidth > 0 ? Math.min(slotWidth, minWidth) : 0;
-      const width = Math.max(boundedMinWidth, Math.min(slotWidth, preferredWidth));
-      const measurement = await measureCard(card, width, values, traces);
+      const initialWidth = Math.max(boundedMinWidth, Math.min(slotWidth, preferredWidth));
+      let measurement = await measureCard(card, initialWidth, values, traces);
+      let width = initialWidth;
+      if (!hasExplicitWidth) {
+        const compactWidth = clamp(measurement.width, boundedMinWidth || 0, slotWidth);
+        if (Math.abs(compactWidth - width) > 12) {
+          width = compactWidth;
+          measurement = await measureCard(card, width, values, traces);
+        } else {
+          width = compactWidth;
+        }
+      }
       measured.push({ card, row, col, span, rowSpan, width, height: measurement.height, children: measurement.children });
       if (rowSpan === 1) {
         rowHeights.set(row, Math.max(rowHeights.get(row) ?? 0, measurement.height));
@@ -509,7 +546,14 @@ async function measureCard(
   const bodyTop = headerHeight + padding;
   const fallbackHeight = headerHeight + padding * 2 + (content.elements.length ? content.height : 44);
   const minHeight = getNumber(card, values, traces, 'min_h', 0);
+  const compactWidth = clamp(Math.max(
+    titleBlock.width ? titleBlock.width + 40 : 0,
+    subtitleBlock.width ? subtitleBlock.width + 40 : 0,
+    content.width ? content.width + padding * 2 : 0,
+    getNumber(card, values, traces, 'compact_min_w', 180),
+  ), getNumber(card, values, traces, 'min_w', 0) || 0, width);
   return {
+    width: compactWidth,
     height: Math.max(minHeight, fallbackHeight),
     children: offsetChildren(content.elements, padding, bodyTop),
   };
@@ -566,15 +610,17 @@ async function layoutStackChildren(
   traces: Map<string, Trace>,
 ): Promise<ChildLayout> {
   let cursorY = 0;
+  let usedWidth = 0;
   const elements: DiagramElement[] = [];
   for (const child of children) {
     const measured = await measureChild(child, width, values, traces);
     const x = resolveAlignedX(options.align, width, measured.width);
+    usedWidth = Math.max(usedWidth, measured.width);
     elements.push(...offsetChildren(measured.elements, x, cursorY));
     cursorY += measured.height + options.gap;
   }
   const height = Math.max(0, cursorY - options.gap);
-  return { width, height, elements };
+  return { width: Math.min(width, usedWidth || width), height, elements };
 }
 
 async function layoutRowChildren(
@@ -602,7 +648,7 @@ async function layoutRowChildren(
     elements.push(...offsetChildren(entry.elements, cursorX, y));
     cursorX += entry.width + options.gap;
   });
-  return { width, height: rowHeight, elements };
+  return { width: Math.min(width, totalWidth), height: rowHeight, elements };
 }
 
 async function layoutColumnChildren(
@@ -633,10 +679,21 @@ async function layoutColumnChildren(
     elements.push(...offsetChildren(measured[index].elements, localX, localY));
   }
 
+  const compactColumnWidths = new Map<number, number>();
+  measured.forEach((entry, index) => {
+    const col = index % columns;
+    compactColumnWidths.set(col, Math.max(compactColumnWidths.get(col) ?? 0, entry.width));
+  });
+  let usedWidth = 0;
+  for (let col = 0; col < columns; col += 1) {
+    usedWidth += compactColumnWidths.get(col) ?? 0;
+  }
+  if (columns > 1) usedWidth += options.gap * (columns - 1);
+
   if (rowHeights.size > 0) {
     totalHeight = [...rowHeights.values()].reduce((sum, value) => sum + value, 0) + options.gap * Math.max(0, rowHeights.size - 1);
   }
-  return { width, height: totalHeight, elements };
+  return { width: Math.min(width, usedWidth || width), height: totalHeight, elements };
 }
 
 function rowOffset(rowHeights: Map<number, number>, row: number, gap: number): number {
@@ -780,9 +837,15 @@ async function measureChild(
       const padding = Math.max(0, getNumber(child, values, traces, 'padding', 0));
       const gap = Math.max(CHILD_GAP_MIN, getNumber(child, values, traces, 'gap', CHILD_GAP_MIN));
       const layout = readContainerOptions(child, values, traces, 'stack', gap);
-      const groupWidth = Math.min(maxWidth, Math.max(80, readNumber(resolveValue(child.properties.w, values, traces), maxWidth)));
-      const innerWidth = Math.max(60, groupWidth - padding * 2);
-      const content = await layoutContainerChildren(child.children ?? [], innerWidth, layout, values, traces);
+      const hasExplicitWidth = child.properties.w != null;
+      let groupWidth = Math.min(maxWidth, Math.max(80, readNumber(resolveValue(child.properties.w, values, traces), maxWidth)));
+      let innerWidth = Math.max(60, groupWidth - padding * 2);
+      let content = await layoutContainerChildren(child.children ?? [], innerWidth, layout, values, traces);
+      if (!hasExplicitWidth) {
+        groupWidth = clamp(content.width + padding * 2, 80, maxWidth);
+        innerWidth = Math.max(60, groupWidth - padding * 2);
+        content = await layoutContainerChildren(child.children ?? [], innerWidth, layout, values, traces);
+      }
       const fill = getString(child, values, traces, 'fill', 'none');
       const stroke = getString(child, values, traces, 'stroke', 'none');
       const visible = fill !== 'none' || stroke !== 'none' || readBoolean(resolveValue(child.properties.show_box, values, traces), false);
@@ -1724,6 +1787,101 @@ function getString(elementToRead: DiagramElement, values: Record<string, GSValue
 
 function getNumber(elementToRead: DiagramElement, values: Record<string, GSValue>, traces: Map<string, Trace>, key: string, fallback = 0): number {
   return readNumber(resolveValue(elementToRead.properties[key], values, traces), fallback);
+}
+
+function measureSemanticBounds(
+  elements: DiagramElement[],
+  values: Record<string, GSValue>,
+  traces: Map<string, Trace>,
+): { minX: number; minY: number; maxX: number; maxY: number } {
+  const bounds = { minX: Number.POSITIVE_INFINITY, minY: Number.POSITIVE_INFINITY, maxX: 0, maxY: 0 };
+
+  const visit = (elementToMeasure: DiagramElement): void => {
+    const x1 = getNumber(elementToMeasure, values, traces, 'x', 0);
+    const y1 = getNumber(elementToMeasure, values, traces, 'y', 0);
+    const x2 = getNumber(elementToMeasure, values, traces, 'x2', x1);
+    const y2 = getNumber(elementToMeasure, values, traces, 'y2', y1);
+    const w = getNumber(elementToMeasure, values, traces, 'w', 0);
+    const h = getNumber(elementToMeasure, values, traces, 'h', 0);
+    const anchor = getString(elementToMeasure, values, traces, 'anchor', 'start');
+
+    let leftX = Math.min(x1, x2);
+    let rightX = Math.max(x2, x1 + w);
+    if ((elementToMeasure.type === 'text' || elementToMeasure.type === 'formula') && !elementToMeasure.properties.x2) {
+      if (anchor === 'middle') {
+        leftX = x1 - w / 2;
+        rightX = x1 + w / 2;
+      } else if (anchor === 'end') {
+        leftX = x1 - w;
+        rightX = x1;
+      }
+    }
+
+    bounds.minX = Math.min(bounds.minX, leftX);
+    bounds.minY = Math.min(bounds.minY, Math.min(y1, y2));
+    bounds.maxX = Math.max(bounds.maxX, rightX);
+    bounds.maxY = Math.max(bounds.maxY, Math.max(y1 + h, y2));
+
+    for (const child of elementToMeasure.children ?? []) visit(child);
+  };
+
+  for (const elementToMeasure of elements) visit(elementToMeasure);
+
+  if (!Number.isFinite(bounds.minX) || !Number.isFinite(bounds.minY)) {
+    return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  }
+
+  return bounds;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function compactLaneFrames(
+  lanes: LaneSpec[],
+  cards: CardLayout[],
+  contentX: number,
+  contentWidth: number,
+  laneGap: number,
+): LaneSpec[] {
+  if (lanes.length <= 1 && !cards.length) return lanes;
+
+  const requiredWidths = new Map<string, number>();
+  for (const lane of lanes) {
+    const laneCards = cards.filter((card) => card.laneId === lane.id);
+    const columnWidths = Array.from({ length: lane.columns }, () => 0);
+    let required = Math.max(180, lane.padding * 2 + 120);
+
+    for (const card of laneCards) {
+      if (card.span === 1) {
+        const colIndex = Math.max(0, Math.min(lane.columns - 1, card.col - 1));
+        columnWidths[colIndex] = Math.max(columnWidths[colIndex], card.width);
+      }
+      required = Math.max(required, card.width + lane.padding * 2);
+    }
+
+    const columnPackedWidth = columnWidths.reduce((sum, value) => sum + value, 0) + Math.max(0, lane.columns - 1) * lane.gapX + lane.padding * 2;
+    requiredWidths.set(lane.id, Math.max(required, columnPackedWidth));
+  }
+
+  const packedWidth = lanes.reduce((sum, lane) => sum + (requiredWidths.get(lane.id) ?? lane.frame.w), 0) + Math.max(0, lanes.length - 1) * laneGap;
+  if (packedWidth >= contentWidth - 8) return lanes;
+
+  let cursorX = contentX;
+  return lanes.map((lane) => {
+    const frameWidth = requiredWidths.get(lane.id) ?? lane.frame.w;
+    const nextLane: LaneSpec = {
+      ...lane,
+      frame: {
+        ...lane.frame,
+        x: cursorX,
+        w: frameWidth,
+      },
+    };
+    cursorX += frameWidth + laneGap;
+    return nextLane;
+  });
 }
 
 export function isSemanticDiagramElement(element: DiagramElement): boolean {

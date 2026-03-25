@@ -69,7 +69,7 @@ diagram "Semantic":
     const { decl, values, traces } = parseAndEval(source);
     const compiled = await compileSemanticDiagram(decl.elements, values as any, traces, 1400, 900);
     const measurement = compiled.elements.find((element) => element.type === 'panel' && element.name === 'measurement')!;
-    expect((measurement.properties.h as any).value).toBeGreaterThan(360);
+    expect((measurement.properties.h as any).value).toBeGreaterThan(300);
     const groupBoxes = measurement.children?.filter((child) => child.name === 'zBlock' || child.name === 'xBlock') ?? [];
     expect(groupBoxes.length).toBe(2);
   });
@@ -125,6 +125,31 @@ diagram "Semantic":
     expect(upperVertical).toBeDefined();
     expect(lowerVertical).toBeDefined();
     expect((upperVertical!.properties.x as any).value).not.toBe((lowerVertical!.properties.x as any).value);
+  });
+
+  test('compacts semantic cards and shrinks the canvas to used content', async () => {
+    const { decl, values, traces } = parseAndEval(`diagram "Semantic":
+  width = 1400
+  height = 900
+  title = ""
+  background = "#ffffff"
+  header top title="Header"
+  separator split labels=["A"]
+  lane one section="one" order=1 columns=1
+  card c1 section="one" row=1 label="One":
+    text v value="Short"
+`);
+    const compiled = await compileSemanticDiagram(decl.elements, values as any, traces, 1400, 900);
+    const panel = compiled.elements.find((element) => element.type === 'panel' && element.name === 'c1')!;
+    expect((panel.properties.w as any).value).toBeLessThan(500);
+    expect(compiled.minWidth).toBeLessThan(1000);
+    expect(compiled.minHeight).toBeLessThan(900);
+
+    const svg = await renderDiagram(decl, values as any, traces, async () => null, path.resolve(__dirname, '../../temp'));
+    const widthMatch = svg.match(/width="([0-9.]+)"/);
+    const heightMatch = svg.match(/height="([0-9.]+)"/);
+    expect(Number(widthMatch?.[1] ?? 0)).toBeLessThan(1000);
+    expect(Number(heightMatch?.[1] ?? 0)).toBeLessThan(900);
   });
 
   test('semantic rendering grows canvas height when needed', async () => {

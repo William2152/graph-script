@@ -16,15 +16,19 @@ export async function renderDiagram(decl: DiagramDeclaration, values: Record<str
   const background = readString(resolveValue(decl.properties.background, values, traces), '#f8fafc');
   const title = readString(resolveValue(decl.properties.title, values, traces), decl.name);
   const subtitle = readString(resolveValue(decl.properties.subtitle, values, traces), '');
+  const fixedCanvas = readBoolean(resolveValue(decl.properties.fixed_canvas, values, traces), false);
   const compiled = await compileSemanticDiagram(decl.elements, values, traces, width, requestedHeight);
-  const height = Math.max(requestedHeight, compiled.minHeight);
+  const finalWidth = compiled.hasSemantic && !fixedCanvas ? Math.max(640, compiled.minWidth) : width;
+  const finalHeight = compiled.hasSemantic && !fixedCanvas
+    ? Math.max(320, compiled.minHeight)
+    : Math.max(requestedHeight, compiled.minHeight);
 
   let body = '';
   if (title) {
     const renderedTitle = await renderRichTextBlock(title, {
-      x: width / 2,
+      x: finalWidth / 2,
       y: 26,
-      maxWidth: width - 120,
+      maxWidth: finalWidth - 120,
       fontSize: 36,
       weight: '800',
       color: '#0f172a',
@@ -36,9 +40,9 @@ export async function renderDiagram(decl: DiagramDeclaration, values: Record<str
   }
   if (subtitle) {
     const renderedSubtitle = await renderRichTextBlock(subtitle, {
-      x: width / 2,
+      x: finalWidth / 2,
       y: 72,
-      maxWidth: width - 160,
+      maxWidth: finalWidth - 160,
       fontSize: 18,
       weight: '500',
       color: '#64748b',
@@ -49,7 +53,7 @@ export async function renderDiagram(decl: DiagramDeclaration, values: Record<str
     body += renderedSubtitle.svg;
   }
   body += await renderElements(compiled.elements, values, traces, renderEmbed, assetBaseDir, 0, 0);
-  return svgDocument(width, height, body, background);
+  return svgDocument(finalWidth, finalHeight, body, background);
 }
 
 async function renderElements(elements: DiagramElement[], values: Record<string, GSValue>, traces: Map<string, Trace>, renderEmbed: RenderEmbed, assetBaseDir: string, offsetX: number, offsetY: number): Promise<string> {

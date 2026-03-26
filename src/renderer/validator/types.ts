@@ -123,6 +123,7 @@ export interface SemanticRoleEntry {
   parentId?: string;
   connectorFrom?: string;
   connectorTo?: string;
+  unplaced?: boolean;
 }
 
 export const SEMANTIC_ROLE_MIN_SIZE: Record<string, number> = {

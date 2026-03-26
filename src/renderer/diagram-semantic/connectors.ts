@@ -7,10 +7,17 @@ import {
   ConnectorPath,
   ConnectorRoutingContext,
   ConnectorSegmentObstacle,
+  CONNECTOR_ANCHOR_EXIT_MIN,
   CONNECTOR_LABEL_MIN,
   CONNECTOR_TRACK_MIN_GAP,
 } from './types';
 import { clamp, element, getNumber, getString } from './helpers';
+
+const CONNECTOR_LABEL_TRACK_CLEARANCE = 10;
+const CONNECTOR_LABEL_PANEL_CLEARANCE = 12;
+const CONNECTOR_LABEL_LABEL_CLEARANCE = 10;
+const CONNECTOR_LABEL_LAYOUT_GAP = 16;
+const CONNECTOR_LABEL_MAX_WIDTH = 240;
 
 export async function compileConnector(
   connector: DiagramElement,
@@ -39,13 +46,50 @@ export async function compileConnector(
   const labelFillOpacity = getNumber(connector, values, traces, 'label_fill_opacity', 0.96);
   const labelPadX = Math.max(10, getNumber(connector, values, traces, 'label_padding_x', 12));
   const labelPadY = Math.max(6, getNumber(connector, values, traces, 'label_padding_y', 7));
-  const path = routeConnector(fromCard, fromRef.anchor, toCard, toRef.anchor, route, [...cardMap.values()], routingContext);
+  const cards = [...cardMap.values()];
+  const labelSize = label
+    ? Math.max(CONNECTOR_LABEL_MIN, getNumber(connector, values, traces, 'size', CONNECTOR_LABEL_MIN))
+    : CONNECTOR_LABEL_MIN;
+  const labelMetrics = label
+    ? await measureRichTextBlock(label, {
+      x: 0,
+      y: 0,
+      maxWidth: CONNECTOR_LABEL_MAX_WIDTH,
+      fontSize: labelSize,
+      weight: getString(connector, values, traces, 'weight', '700'),
+      anchor: 'middle',
+      latex: readLatexMode(undefined, 'auto'),
+      maxLines: 2,
+      fontFamily,
+    })
+    : null;
+  const path = routeConnector(
+    fromCard,
+    fromRef.anchor,
+    toCard,
+    toRef.anchor,
+    route,
+    cards,
+    routingContext,
+    labelMetrics
+      ? {
+        labelWidth: labelMetrics.width,
+        labelHeight: labelMetrics.height,
+        fromId: fromCard.id,
+        toId: toCard.id,
+        labelDx,
+        labelDy,
+        padX: labelPadX,
+        padY: labelPadY,
+      }
+      : undefined,
+  );
+  const connectorSegments = pathSegments(path.points, connector.name);
 
   const segments: DiagramElement[] = [];
-  for (let index = 0; index < path.points.length - 1; index += 1) {
-    const start = path.points[index];
-    const end = path.points[index + 1];
-    const type = index === path.points.length - 2 ? 'arrow' : 'line';
+  for (let index = 0; index < connectorSegments.length; index += 1) {
+    const { start, end } = connectorSegments[index];
+    const type = index === connectorSegments.length - 1 ? 'arrow' : 'line';
     segments.push(element(type, `${connector.name}-seg-${index + 1}`, {
       x: start.x,
       y: start.y,
@@ -59,29 +103,16 @@ export async function compileConnector(
       connector_to: toCard.id,
       semantic_role: 'connector_segment',
     }));
-    routingContext.segments.push({ start, end, connectorId: connector.name });
   }
 
-  if (label) {
-    const labelSize = Math.max(CONNECTOR_LABEL_MIN, getNumber(connector, values, traces, 'size', CONNECTOR_LABEL_MIN));
-    const labelMetrics = await measureRichTextBlock(label, {
-      x: path.labelX,
-      y: path.labelY,
-      maxWidth: Math.min(320, Math.max(180, path.labelSegmentLength - 20)),
-      fontSize: labelSize,
-      weight: getString(connector, values, traces, 'weight', '700'),
-      anchor: 'middle',
-      latex: readLatexMode(undefined, 'auto'),
-      maxLines: 2,
-      fontFamily,
-    });
-
+  if (label && labelMetrics) {
     const labelPlacement = placeConnectorLabel(
       path,
       labelMetrics.width,
       labelMetrics.height,
-      [...cardMap.values()],
+      cards,
       routingContext,
+      connectorSegments,
       fromCard.id,
       toCard.id,
       labelDx,
@@ -126,9 +157,27 @@ export async function compileConnector(
         connector_to: toCard.id,
       }));
       routingContext.labels.push(labelPlacement.box);
+    } else {
+      segments.push(element('box', `${connector.name}-label-missing`, {
+        x: path.labelX,
+        y: path.labelY,
+        w: 1,
+        h: 1,
+        label: '',
+        fill: 'none',
+        stroke: 'none',
+        size: labelSize,
+        shadow: false,
+        validation_ignore: true,
+        semantic_role: 'connector_label',
+        connector_from: fromCard.id,
+        connector_to: toCard.id,
+        connector_label_unplaced: true,
+      }));
     }
   }
 
+  routingContext.segments.push(...connectorSegments);
   return segments;
 }
 
@@ -160,6 +209,7 @@ function placeConnectorLabel(
   labelHeight: number,
   cards: CardLayout[],
   routingContext: ConnectorRoutingContext,
+  currentSegments: ConnectorSegmentObstacle[],
   fromId: string,
   toId: string,
   labelDx: number,
@@ -169,39 +219,11 @@ function placeConnectorLabel(
 ): { box: BoxArea; textX: number; textY: number; textWidth: number } | null {
   if (labelWidth <= 0 || labelHeight <= 0) return null;
 
-  const horizontal = path.labelSegmentStart.y === path.labelSegmentEnd.y;
-  const segmentLength = horizontal
-    ? Math.abs(path.labelSegmentEnd.x - path.labelSegmentStart.x)
-    : Math.abs(path.labelSegmentEnd.y - path.labelSegmentStart.y);
-  const requiredLength = horizontal ? labelWidth + 24 : labelHeight + 20;
-  if (segmentLength + 0.1 < requiredLength) return null;
-
   const boxWidth = labelWidth + padX * 2;
   const boxHeight = labelHeight + padY * 2;
-  const segmentCenter = boxCenter({
-    x: Math.min(path.labelSegmentStart.x, path.labelSegmentEnd.x),
-    y: Math.min(path.labelSegmentStart.y, path.labelSegmentEnd.y),
-    width: Math.abs(path.labelSegmentEnd.x - path.labelSegmentStart.x),
-    height: Math.abs(path.labelSegmentEnd.y - path.labelSegmentStart.y),
-  });
-  const gap = 16;
-
-  const candidates = horizontal
-    ? [
-        { x: segmentCenter.x - boxWidth / 2, y: path.labelSegmentStart.y - boxHeight - gap },
-        { x: segmentCenter.x - boxWidth / 2, y: path.labelSegmentStart.y + gap },
-        { x: Math.min(path.labelSegmentStart.x, path.labelSegmentEnd.x) + 12, y: path.labelSegmentStart.y - boxHeight - gap },
-        { x: Math.max(path.labelSegmentStart.x, path.labelSegmentEnd.x) - boxWidth - 12, y: path.labelSegmentStart.y + gap },
-      ]
-    : [
-        { x: path.labelSegmentStart.x - boxWidth - gap, y: segmentCenter.y - boxHeight / 2 },
-        { x: path.labelSegmentStart.x + gap, y: segmentCenter.y - boxHeight / 2 },
-        { x: path.labelSegmentStart.x - boxWidth - gap, y: Math.min(path.labelSegmentStart.y, path.labelSegmentEnd.y) + 10 },
-        { x: path.labelSegmentStart.x + gap, y: Math.max(path.labelSegmentStart.y, path.labelSegmentEnd.y) - boxHeight - 10 },
-      ];
-
   let best: { box: BoxArea; score: number } | null = null;
-  const currentSegments = pathSegments(path.points, '__current__');
+  const occupiedSegments = [...routingContext.segments, ...currentSegments];
+  const candidates = connectorLabelCandidates(path, boxWidth, boxHeight);
 
   for (const candidate of candidates) {
     const box: BoxArea = {
@@ -211,28 +233,33 @@ function placeConnectorLabel(
       height: boxHeight,
     };
 
-    let score = Math.abs(candidate.x - (horizontal ? segmentCenter.x - boxWidth / 2 : path.labelSegmentStart.x))
-      + Math.abs(candidate.y - (horizontal ? path.labelSegmentStart.y - boxHeight - gap : segmentCenter.y - boxHeight / 2));
-
-    for (const card of cards) {
-      if (card.id === fromId || card.id === toId) continue;
-      if (boxesOverlap(expandBox(box, 8), { x: card.x, y: card.y, width: card.width, height: card.height })) {
-        score += 100000;
-      }
+    if (cards.some((card) => boxesOverlap(
+      expandBox(box, CONNECTOR_LABEL_PANEL_CLEARANCE),
+      { x: card.x, y: card.y, width: card.width, height: card.height },
+    ))) {
+      continue;
     }
 
-    for (const placed of routingContext.labels) {
-      if (boxesOverlap(expandBox(box, 4), expandBox(placed, 4))) score += 80000;
+    if (routingContext.labels.some((placed) => boxesOverlap(
+      expandBox(box, CONNECTOR_LABEL_LABEL_CLEARANCE),
+      expandBox(placed, CONNECTOR_LABEL_LABEL_CLEARANCE),
+    ))) {
+      continue;
     }
 
-    for (const segment of [...routingContext.segments, ...currentSegments]) {
-      if (segmentHitsBox(segment.start, segment.end, box, 8)) score += 25000;
+    if (occupiedSegments.some((segment) => segmentHitsBox(
+      segment.start,
+      segment.end,
+      box,
+      CONNECTOR_LABEL_TRACK_CLEARANCE,
+    ))) {
+      continue;
     }
 
-    if (!best || score < best.score) best = { box, score };
+    if (!best || candidate.score < best.score) best = { box, score: candidate.score };
   }
 
-  if (!best || best.score >= 100000) return null;
+  if (!best) return null;
 
   return {
     box: best.box,
@@ -250,6 +277,16 @@ function routeConnector(
   route: string,
   cards: CardLayout[],
   routingContext: ConnectorRoutingContext,
+  labelPreference?: {
+    labelWidth: number;
+    labelHeight: number;
+    fromId: string;
+    toId: string;
+    labelDx: number;
+    labelDy: number;
+    padX: number;
+    padY: number;
+  },
 ): ConnectorPath {
   const offset = 30;
   const fromPoint = anchorPoint(fromCard, fromAnchor);
@@ -277,34 +314,208 @@ function routeConnector(
       routingContext,
     );
     for (const pathCandidate of pathCandidates) {
-      const points = simplifyPoints(pathCandidate);
-      const score = scoreConnectorPath(points, cards, fromCard.id, toCard.id, routingContext);
+      const points = spreadConnectorPath(
+        simplifyPoints(pathCandidate),
+        routingContext,
+        cards,
+        fromCard.id,
+        toCard.id,
+      );
+      let score = scoreConnectorPath(points, cards, fromCard.id, toCard.id, routingContext);
+      if (labelPreference) {
+        const previewPath = connectorPathDetails(points);
+        const previewPlacement = placeConnectorLabel(
+          previewPath,
+          labelPreference.labelWidth,
+          labelPreference.labelHeight,
+          cards,
+          routingContext,
+          pathSegments(points, '__preview__'),
+          labelPreference.fromId,
+          labelPreference.toId,
+          labelPreference.labelDx,
+          labelPreference.labelDy,
+          labelPreference.padX,
+          labelPreference.padY,
+        );
+        score += previewPlacement ? -22000 : 260000;
+      }
       if (!best || score < best.score) best = { points, score };
       if (score === 0) break;
     }
     if (best?.score === 0) break;
   }
 
-  const points = spreadConnectorPath(best?.points ?? [fromPoint, fromOut, toOut, toPoint], routingContext);
-  let labelX = (fromPoint.x + toPoint.x) / 2;
-  let labelY = (fromPoint.y + toPoint.y) / 2;
-  let labelSegmentLength = 0;
-  let labelSegmentStart = points[0];
-  let labelSegmentEnd = points[points.length - 1];
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const start = points[index];
-    const end = points[index + 1];
-    const segmentLength = Math.abs(end.x - start.x) + Math.abs(end.y - start.y);
-    if (segmentLength > labelSegmentLength) {
-      labelSegmentLength = segmentLength;
-      labelX = (start.x + end.x) / 2;
-      labelY = (start.y + end.y) / 2;
-      labelSegmentStart = start;
-      labelSegmentEnd = end;
+  return connectorPathDetails(best?.points ?? [fromPoint, fromOut, toOut, toPoint]);
+}
+
+function connectorLabelCandidates(path: ConnectorPath, boxWidth: number, boxHeight: number): Array<{ x: number; y: number; score: number }> {
+  const candidates: Array<{ x: number; y: number; score: number }> = [];
+
+  for (let segmentIndex = 0; segmentIndex < path.labelSegments.length; segmentIndex += 1) {
+    const segment = path.labelSegments[segmentIndex];
+    const horizontal = segment.start.y === segment.end.y;
+    const segmentCandidates = horizontal
+      ? horizontalLabelCandidates(segment, boxWidth, boxHeight)
+      : verticalLabelCandidates(segment, boxWidth, boxHeight);
+
+    for (const candidate of segmentCandidates) {
+      const box = { x: candidate.x, y: candidate.y, width: boxWidth, height: boxHeight };
+      const center = boxCenter(box);
+      candidates.push({
+        x: candidate.x,
+        y: candidate.y,
+        score: segmentIndex * 1000
+          + candidate.penalty
+          + Math.abs(center.x - path.labelX) * 0.35
+          + Math.abs(center.y - path.labelY) * 0.35
+          + distancePointToSegment(center, segment.start, segment.end),
+      });
     }
   }
 
-  return { points, labelX, labelY, labelSegmentLength, labelSegmentStart, labelSegmentEnd };
+  for (let pointIndex = 1; pointIndex < path.points.length - 1; pointIndex += 1) {
+    const pointCandidates = elbowLabelCandidates(path.points[pointIndex], boxWidth, boxHeight);
+    for (const candidate of pointCandidates) {
+      const box = { x: candidate.x, y: candidate.y, width: boxWidth, height: boxHeight };
+      const center = boxCenter(box);
+      candidates.push({
+        x: candidate.x,
+        y: candidate.y,
+        score: 4000
+          + candidate.penalty
+          + Math.abs(center.x - path.labelX) * 0.45
+          + Math.abs(center.y - path.labelY) * 0.45
+          + distancePointToPath(center, path.points),
+      });
+    }
+  }
+
+  return uniqueLabelCandidates(candidates);
+}
+
+function horizontalLabelCandidates(
+  segment: { start: { x: number; y: number }; end: { x: number; y: number }; length: number },
+  boxWidth: number,
+  boxHeight: number,
+): Array<{ x: number; y: number; penalty: number }> {
+  const minX = Math.min(segment.start.x, segment.end.x);
+  const maxX = Math.max(segment.start.x, segment.end.x);
+  const centerX = (minX + maxX) / 2;
+  const y = segment.start.y;
+  const fractions = [0.25, 0.5, 0.75];
+  const xCandidates = uniqueNumbers([
+    centerX - boxWidth / 2,
+    minX - boxWidth / 2,
+    maxX - boxWidth / 2,
+    minX + 12 - boxWidth / 2,
+    maxX - 12 - boxWidth / 2,
+    ...fractions.map((fraction) => minX + (maxX - minX) * fraction - boxWidth / 2),
+  ]);
+
+  const candidates: Array<{ x: number; y: number; penalty: number }> = [];
+  for (const x of xCandidates) {
+    candidates.push({ x, y: y - boxHeight - CONNECTOR_LABEL_LAYOUT_GAP, penalty: 0 });
+    candidates.push({ x, y: y + CONNECTOR_LABEL_LAYOUT_GAP, penalty: 0 });
+  }
+
+  candidates.push({ x: minX - boxWidth - CONNECTOR_LABEL_LAYOUT_GAP, y: y - boxHeight / 2, penalty: 28 });
+  candidates.push({ x: maxX + CONNECTOR_LABEL_LAYOUT_GAP, y: y - boxHeight / 2, penalty: 28 });
+  candidates.push({ x: minX - boxWidth - CONNECTOR_LABEL_LAYOUT_GAP, y: y - boxHeight - CONNECTOR_LABEL_LAYOUT_GAP, penalty: 42 });
+  candidates.push({ x: minX - boxWidth - CONNECTOR_LABEL_LAYOUT_GAP, y: y + CONNECTOR_LABEL_LAYOUT_GAP, penalty: 42 });
+  candidates.push({ x: maxX + CONNECTOR_LABEL_LAYOUT_GAP, y: y - boxHeight - CONNECTOR_LABEL_LAYOUT_GAP, penalty: 42 });
+  candidates.push({ x: maxX + CONNECTOR_LABEL_LAYOUT_GAP, y: y + CONNECTOR_LABEL_LAYOUT_GAP, penalty: 42 });
+  return candidates;
+}
+
+function verticalLabelCandidates(
+  segment: { start: { x: number; y: number }; end: { x: number; y: number }; length: number },
+  boxWidth: number,
+  boxHeight: number,
+): Array<{ x: number; y: number; penalty: number }> {
+  const minY = Math.min(segment.start.y, segment.end.y);
+  const maxY = Math.max(segment.start.y, segment.end.y);
+  const centerY = (minY + maxY) / 2;
+  const x = segment.start.x;
+  const fractions = [0.25, 0.5, 0.75];
+  const yCandidates = uniqueNumbers([
+    centerY - boxHeight / 2,
+    minY - boxHeight / 2,
+    maxY - boxHeight / 2,
+    minY + 10 - boxHeight / 2,
+    maxY - 10 - boxHeight / 2,
+    ...fractions.map((fraction) => minY + (maxY - minY) * fraction - boxHeight / 2),
+  ]);
+
+  const candidates: Array<{ x: number; y: number; penalty: number }> = [];
+  for (const y of yCandidates) {
+    candidates.push({ x: x - boxWidth - CONNECTOR_LABEL_LAYOUT_GAP, y, penalty: 0 });
+    candidates.push({ x: x + CONNECTOR_LABEL_LAYOUT_GAP, y, penalty: 0 });
+  }
+
+  candidates.push({ x: x - boxWidth / 2, y: minY - boxHeight - CONNECTOR_LABEL_LAYOUT_GAP, penalty: 28 });
+  candidates.push({ x: x - boxWidth / 2, y: maxY + CONNECTOR_LABEL_LAYOUT_GAP, penalty: 28 });
+  candidates.push({ x: x - boxWidth - CONNECTOR_LABEL_LAYOUT_GAP, y: minY - boxHeight - CONNECTOR_LABEL_LAYOUT_GAP, penalty: 42 });
+  candidates.push({ x: x + CONNECTOR_LABEL_LAYOUT_GAP, y: minY - boxHeight - CONNECTOR_LABEL_LAYOUT_GAP, penalty: 42 });
+  candidates.push({ x: x - boxWidth - CONNECTOR_LABEL_LAYOUT_GAP, y: maxY + CONNECTOR_LABEL_LAYOUT_GAP, penalty: 42 });
+  candidates.push({ x: x + CONNECTOR_LABEL_LAYOUT_GAP, y: maxY + CONNECTOR_LABEL_LAYOUT_GAP, penalty: 42 });
+  return candidates;
+}
+
+function elbowLabelCandidates(
+  point: { x: number; y: number },
+  boxWidth: number,
+  boxHeight: number,
+): Array<{ x: number; y: number; penalty: number }> {
+  const gap = CONNECTOR_LABEL_LAYOUT_GAP;
+  return [
+    { x: point.x - boxWidth / 2, y: point.y - boxHeight - gap, penalty: 24 },
+    { x: point.x - boxWidth / 2, y: point.y + gap, penalty: 24 },
+    { x: point.x - boxWidth - gap, y: point.y - boxHeight / 2, penalty: 24 },
+    { x: point.x + gap, y: point.y - boxHeight / 2, penalty: 24 },
+    { x: point.x - boxWidth - gap, y: point.y - boxHeight - gap, penalty: 36 },
+    { x: point.x + gap, y: point.y - boxHeight - gap, penalty: 36 },
+    { x: point.x - boxWidth - gap, y: point.y + gap, penalty: 36 },
+    { x: point.x + gap, y: point.y + gap, penalty: 36 },
+  ];
+}
+
+function uniqueLabelCandidates(
+  candidates: Array<{ x: number; y: number; score: number }>,
+): Array<{ x: number; y: number; score: number }> {
+  return candidates
+    .filter((candidate, index, list) =>
+      list.findIndex((other) => Math.abs(other.x - candidate.x) < 1 && Math.abs(other.y - candidate.y) < 1) === index)
+    .sort((left, right) => left.score - right.score);
+}
+
+function uniqueNumbers(values: number[]): number[] {
+  return values.filter((value, index, array) => array.findIndex((candidate) => Math.abs(candidate - value) < 1) === index);
+}
+
+function connectorPathDetails(points: { x: number; y: number }[]): ConnectorPath {
+  const labelSegments = points
+    .slice(0, -1)
+    .map((start, index) => ({
+      start,
+      end: points[index + 1],
+      length: segmentLength(start, points[index + 1]),
+    }))
+    .filter((segment) => segment.length > 0)
+    .sort((left, right) => right.length - left.length);
+
+  let labelX = (points[0].x + points[points.length - 1].x) / 2;
+  let labelY = (points[0].y + points[points.length - 1].y) / 2;
+  let labelSegmentLength = labelSegments[0]?.length ?? 0;
+  let labelSegmentStart = labelSegments[0]?.start ?? points[0];
+  let labelSegmentEnd = labelSegments[0]?.end ?? points[points.length - 1];
+
+  if (labelSegments[0]) {
+    labelX = (labelSegments[0].start.x + labelSegments[0].end.x) / 2;
+    labelY = (labelSegments[0].start.y + labelSegments[0].end.y) / 2;
+  }
+
+  return { points, labelX, labelY, labelSegmentLength, labelSegmentStart, labelSegmentEnd, labelSegments };
 }
 
 function buildConnectorCandidatePaths(
@@ -546,7 +757,7 @@ function scoreConnectorPath(points: { x: number; y: number }[], cards: CardLayou
   for (let index = 0; index < points.length - 1; index += 1) {
     const start = points[index];
     const end = points[index + 1];
-    length += Math.abs(end.x - start.x) + Math.abs(end.y - start.y);
+    length += segmentLength(start, end);
     for (const card of cards) {
       if (card.id === fromId || card.id === toId) continue;
       if (segmentHitsCard(start, end, card)) intersections += 1;
@@ -558,7 +769,13 @@ function scoreConnectorPath(points: { x: number; y: number }[], cards: CardLayou
     }
   }
 
-  return intersections * 100000 + labelPenalty * 40000 + connectorPenalty + clearancePenalty + length + Math.max(0, points.length - 2) * 28;
+  return intersections * 100000
+    + labelPenalty * 40000
+    + connectorPenalty
+    + clearancePenalty
+    + connectorAnchorLegPenalty(points)
+    + length
+    + Math.max(0, points.length - 2) * 28;
 }
 
 function segmentHitsCard(start: { x: number; y: number }, end: { x: number; y: number }, card: CardLayout): boolean {
@@ -583,9 +800,15 @@ function overlaps(aStart: number, aEnd: number, bStart: number, bEnd: number): b
   return Math.min(aEnd, bEnd) - Math.max(aStart, bStart) > 0;
 }
 
-function spreadConnectorPath(points: { x: number; y: number }[], routingContext: ConnectorRoutingContext): { x: number; y: number }[] {
+function spreadConnectorPath(
+  points: { x: number; y: number }[],
+  routingContext: ConnectorRoutingContext,
+  cards: CardLayout[],
+  fromId: string,
+  toId: string,
+): { x: number; y: number }[] {
   if (points.length < 5 || !routingContext.segments.length) return points;
-  const adjusted = points.map((point) => ({ ...point }));
+  let adjusted = points.map((point) => ({ ...point }));
   const maxPasses = 4;
 
   for (let pass = 0; pass < maxPasses; pass += 1) {
@@ -615,22 +838,35 @@ function spreadConnectorPath(points: { x: number; y: number }[], routingContext:
       }
 
       if (requiredShift <= 0) continue;
-      if (start.x === end.x) {
-        const before = adjusted[index - 1];
-        const after = adjusted[index + 2];
-        const center = (before.x + after.x) / 2;
-        const direction = start.x <= center ? -1 : 1;
-        adjusted[index] = { x: adjusted[index].x + direction * requiredShift, y: adjusted[index].y };
-        adjusted[index + 1] = { x: adjusted[index + 1].x + direction * requiredShift, y: adjusted[index + 1].y };
-      } else {
-        const before = adjusted[index - 1];
-        const after = adjusted[index + 2];
-        const center = (before.y + after.y) / 2;
-        const direction = start.y <= center ? -1 : 1;
-        adjusted[index] = { x: adjusted[index].x, y: adjusted[index].y + direction * requiredShift };
-        adjusted[index + 1] = { x: adjusted[index + 1].x, y: adjusted[index + 1].y + direction * requiredShift };
+
+      const before = adjusted[index - 1];
+      const after = adjusted[index + 2];
+      const preferredDirection = start.x === end.x
+        ? (start.x <= (before.x + after.x) / 2 ? -1 : 1)
+        : (start.y <= (before.y + after.y) / 2 ? -1 : 1);
+      const candidateDirections = [preferredDirection, -preferredDirection];
+      let bestTrial: { points: { x: number; y: number }[]; score: number } | null = null;
+
+      for (const direction of candidateDirections) {
+        const shifted = shiftConnectorSegment(
+          adjusted,
+          index,
+          start.x === end.x ? direction * requiredShift : 0,
+          start.y === end.y ? direction * requiredShift : 0,
+        );
+        const simplified = simplifyPoints(shifted);
+        if (!hasMinimumAnchorLegs(simplified)) continue;
+
+        const score = scoreConnectorPath(simplified, cards, fromId, toId, routingContext);
+        if (!bestTrial || score < bestTrial.score) {
+          bestTrial = { points: simplified, score };
+        }
       }
+
+      if (!bestTrial) continue;
+      adjusted = bestTrial.points;
       changed = true;
+      break;
     }
 
     if (!changed) break;
@@ -703,6 +939,68 @@ function segmentsCrossOrthogonally(startA: { x: number; y: number }, endA: { x: 
 
 function rangeOverlapLength(aStart: number, aEnd: number, bStart: number, bEnd: number): number {
   return Math.max(0, Math.min(Math.max(aStart, aEnd), Math.max(bStart, bEnd)) - Math.max(Math.min(aStart, aEnd), Math.min(bStart, bEnd)));
+}
+
+function segmentLength(start: { x: number; y: number }, end: { x: number; y: number }): number {
+  return Math.abs(end.x - start.x) + Math.abs(end.y - start.y);
+}
+
+function distancePointToSegment(
+  point: { x: number; y: number },
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+): number {
+  if (start.y === end.y) {
+    const minX = Math.min(start.x, end.x);
+    const maxX = Math.max(start.x, end.x);
+    const x = clamp(point.x, minX, maxX);
+    return Math.abs(point.x - x) + Math.abs(point.y - start.y);
+  }
+  const minY = Math.min(start.y, end.y);
+  const maxY = Math.max(start.y, end.y);
+  const y = clamp(point.y, minY, maxY);
+  return Math.abs(point.x - start.x) + Math.abs(point.y - y);
+}
+
+function distancePointToPath(point: { x: number; y: number }, points: { x: number; y: number }[]): number {
+  let best = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    best = Math.min(best, distancePointToSegment(point, points[index], points[index + 1]));
+  }
+  return Number.isFinite(best) ? best : 0;
+}
+
+function connectorAnchorLegPenalty(points: { x: number; y: number }[]): number {
+  if (points.length <= 2) return 0;
+
+  let penalty = 0;
+  const firstLeg = segmentLength(points[0], points[1]);
+  const lastLeg = segmentLength(points[points.length - 2], points[points.length - 1]);
+
+  if (firstLeg + 0.1 < CONNECTOR_ANCHOR_EXIT_MIN) {
+    penalty += 120000 + Math.round((CONNECTOR_ANCHOR_EXIT_MIN - firstLeg) * 2500);
+  }
+  if (lastLeg + 0.1 < CONNECTOR_ANCHOR_EXIT_MIN) {
+    penalty += 120000 + Math.round((CONNECTOR_ANCHOR_EXIT_MIN - lastLeg) * 2500);
+  }
+
+  return penalty;
+}
+
+function hasMinimumAnchorLegs(points: { x: number; y: number }[]): boolean {
+  return connectorAnchorLegPenalty(points) === 0;
+}
+
+function shiftConnectorSegment(
+  points: { x: number; y: number }[],
+  index: number,
+  deltaX: number,
+  deltaY: number,
+): { x: number; y: number }[] {
+  const shifted = points.map((point) => ({ ...point }));
+  shifted[index] = { x: shifted[index].x + deltaX, y: shifted[index].y + deltaY };
+  shifted[index + 1] = { x: shifted[index + 1].x + deltaX, y: shifted[index + 1].y + deltaY };
+  return shifted;
 }
 
 function betweenInclusive(value: number, start: number, end: number): boolean {

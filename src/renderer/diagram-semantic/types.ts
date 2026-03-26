@@ -15,6 +15,7 @@ export const BODY_TEXT_MIN = 16;
 export const FORMULA_TEXT_MIN = 22;
 export const CONNECTOR_LABEL_MIN = 16;
 export const CONNECTOR_TRACK_MIN_GAP = 28;
+export const CONNECTOR_ANCHOR_EXIT_MIN = 24;
 export const CARD_GAP_MIN = 28;
 export const CHILD_GAP_MIN = 16;
 export const MIN_ASSET_WIDTH = 120;
@@ -76,6 +77,11 @@ export interface ConnectorPath {
   labelSegmentLength: number;
   labelSegmentStart: { x: number; y: number };
   labelSegmentEnd: { x: number; y: number };
+  labelSegments: Array<{
+    start: { x: number; y: number };
+    end: { x: number; y: number };
+    length: number;
+  }>;
 }
 
 export interface BoxArea {

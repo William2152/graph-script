@@ -1,10 +1,11 @@
 import { DiagramElement } from '../../ast/types';
 import { GSValue, Trace } from '../../runtime/values';
 import { BoundingBox, ValidationIssue, ValidationSnapshot, MIN_LAYOUT_GAP, EXCESSIVE_GAP_MULTIPLIER } from './types';
-import { getBooleanProperty, getNumberProperty, resolveElementBox, boxGap, verticalGap } from './helpers';
+import { getBooleanProperty, getNumberProperty, getStringProperty, resolveElementBox, boxGap, verticalGap } from './helpers';
 import { detectOverlaps } from './detection';
 
 const OVERLAP_TYPES_ALLOWED = new Set(['line', 'arrow', 'connector', 'embed']);
+const BOX_LIKE_TYPES = new Set(['panel', 'box', 'callout', 'badge']);
 
 export function collectCoreValidationIssues(
   snapshot: ValidationSnapshot,
@@ -86,13 +87,18 @@ export function detectGapIssues(
     const x = offsetX + getNumberProperty(element, values, traces, 'x', 0);
     const y = offsetY + getNumberProperty(element, values, traces, 'y', 0);
     if (element.children?.length) {
+      const hasExplicitGap = element.properties.min_gap != null;
+      const semanticRole = getStringProperty(element, values, traces, 'semantic_role', '');
       const minGap = Math.max(MIN_LAYOUT_GAP, getNumberProperty(element, values, traces, 'min_gap', MIN_LAYOUT_GAP));
       const childBoxes = element.children
         .filter((child) => !OVERLAP_TYPES_ALLOWED.has(child.type) && !getBooleanProperty(child, values, traces, 'validation_ignore', false))
         .map((child) => absoluteBox(child, values, traces, x, y))
         .filter((box): box is BoundingBox => box !== null);
-      issues.push(...detectSiblingGapIssues(childBoxes, minGap));
-      issues.push(...detectAwkwardSpacingIssues(childBoxes, minGap));
+      const shouldCheckSiblingGaps = hasExplicitGap || !!semanticRole || !BOX_LIKE_TYPES.has(element.type);
+      if (shouldCheckSiblingGaps) {
+        issues.push(...detectSiblingGapIssues(childBoxes, minGap));
+        issues.push(...detectAwkwardSpacingIssues(childBoxes, minGap));
+      }
       issues.push(...detectGapIssues(element.children, values, traces, x, y));
     }
   }

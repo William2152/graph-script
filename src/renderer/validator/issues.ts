@@ -13,6 +13,11 @@ import {
   detectConnectorCrossPanelIssues,
   detectConnectorCrowdingIssues,
 } from './issues-connectors';
+import {
+  detectEmbedScaleIssues,
+  detectExcessiveEmptySpaceIssues,
+  detectMisalignedSiblingIssues,
+} from './issues-readability';
 import { detectMathFallbackIssues } from './issues-math-fallback';
 
 export {
@@ -22,6 +27,9 @@ export {
   detectAwkwardSpacingIssues,
   detectConnectorCrossPanelIssues,
   detectConnectorCrowdingIssues,
+  detectEmbedScaleIssues,
+  detectExcessiveEmptySpaceIssues,
+  detectMisalignedSiblingIssues,
   detectMathFallbackIssues,
 };
 
@@ -38,6 +46,9 @@ export function collectValidationIssues(
   issues.push(...collectCoreValidationIssues(snapshot, values, traces));
   issues.push(...detectConnectorCrossPanelIssues(snapshot.elements, snapshot.boxes, values, traces));
   issues.push(...detectConnectorCrowdingIssues(snapshot.elements, values, traces));
+  issues.push(...detectEmbedScaleIssues(snapshot.elements, values, traces));
+  issues.push(...detectExcessiveEmptySpaceIssues(snapshot.elements, values, traces));
+  issues.push(...detectMisalignedSiblingIssues(snapshot.elements, values, traces));
   issues.push(...detectMathFallbackIssues(snapshot.elements, values, traces));
   issues.push(...detectSemanticReadabilityIssues(snapshot, values, traces));
   return dedupeIssues(issues);

@@ -12,6 +12,8 @@
     "test": "jest",
     "check": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
+    "check:max-lines": "ts-node scripts/check-max-lines.ts",
+    "guard:quality": "npm run check:max-lines && npm run lint && npm run check && npm run test",
     "start": "node dist/cli.js",
     "dev": "ts-node src/cli.ts",
     "smoke:semantic-readability": "bun run scripts/semantic-readability-smoke.ts"

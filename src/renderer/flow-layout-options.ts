@@ -6,6 +6,7 @@ import {
   LayoutMode,
   ResolvedFlowOptions,
 } from './flow-types';
+import { resolveReadabilityMode, READABILITY_POLICY } from './readability-policy';
 
 /**
  * Reads and normalizes flow layout options from declaration properties.
@@ -13,7 +14,11 @@ import {
 export function resolveFlowOptions(flow: FlowDeclaration): ResolvedFlowOptions {
   const direction = resolveDirection(flow);
   const preferredFontSize = Math.max(16, readFlowNumber(flow.properties.preferred_font_size, 17));
-  const minFontSize = Math.min(preferredFontSize, Math.max(12, readFlowNumber(flow.properties.min_font_size, 14)));
+  const readabilityMode = resolveReadabilityMode(readFlowString(flow.properties.readability_mode, 'auto'), 'auto');
+  const minFontSize = Math.min(
+    preferredFontSize,
+    Math.max(READABILITY_POLICY.flowFontMin, readFlowNumber(flow.properties.min_font_size, READABILITY_POLICY.flowFontMin)),
+  );
   const layoutMode = readFlowString(flow.properties.layout_mode, 'auto');
   const fit = readFlowString(flow.properties.fit, 'readable') === 'compact' ? 'compact' : 'readable';
 
@@ -25,6 +30,7 @@ export function resolveFlowOptions(flow: FlowDeclaration): ResolvedFlowOptions {
     layoutMode: normalizeLayoutMode(layoutMode),
     fit,
     direction,
+    readabilityMode,
   };
 }
 

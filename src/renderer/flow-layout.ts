@@ -72,7 +72,7 @@ function buildCandidate(
   const fitsPreferred = bounds.maxX - bounds.minX <= options.targetWidth - 120
     && bounds.maxY - bounds.minY <= options.targetHeight - 150;
 
-  if (!fitsPreferred) {
+  if (!fitsPreferred && options.readabilityMode === 'legacy') {
     const scaleX = (options.targetWidth - 120) / Math.max(bounds.maxX - bounds.minX, 1);
     const scaleY = (options.targetHeight - 150) / Math.max(bounds.maxY - bounds.minY, 1);
     const scaledFont = Math.floor(options.preferredFontSize * Math.min(scaleX, scaleY, 1));
@@ -90,7 +90,9 @@ function buildCandidate(
   const overflowY = Math.max(0, contentHeight - (options.targetHeight - 150));
   const modePenalty = mode === 'snake' ? 0 : mode === 'single_row' ? 24 : 36;
   const compactPenalty = options.preferredFontSize - fontSize;
-  const score = overflowX * 5 + overflowY * 4 + compactPenalty * 40 + modePenalty;
+  const score = options.readabilityMode === 'legacy'
+    ? overflowX * 5 + overflowY * 4 + compactPenalty * 40 + modePenalty
+    : overflowX * 1.8 + overflowY * 1.6 + compactPenalty * 140 + modePenalty;
 
   return {
     mode,

@@ -1,4 +1,5 @@
 import { DiagramElement } from '../../ast/types';
+import { READABILITY_POLICY, ReadabilityMode } from '../readability-policy';
 
 export const ZERO_LOC = {
   start: { line: 0, column: 0, offset: 0 },
@@ -8,12 +9,12 @@ export const ZERO_LOC = {
 export const SEMANTIC_TYPES = new Set(['header', 'separator', 'lane', 'card', 'connector', 'loop_label']);
 export const CONTAINER_TYPES = new Set(['group', 'divider', 'spacer']);
 
-export const HEADER_TITLE_MIN = 28;
-export const SECTION_TITLE_MIN = 24;
-export const CARD_TITLE_MIN = 20;
-export const BODY_TEXT_MIN = 16;
-export const FORMULA_TEXT_MIN = 22;
-export const CONNECTOR_LABEL_MIN = 16;
+export const HEADER_TITLE_MIN = READABILITY_POLICY.headerTitleMin;
+export const SECTION_TITLE_MIN = READABILITY_POLICY.sectionTitleMin;
+export const CARD_TITLE_MIN = READABILITY_POLICY.cardTitleMin;
+export const BODY_TEXT_MIN = READABILITY_POLICY.bodyTextMin;
+export const FORMULA_TEXT_MIN = READABILITY_POLICY.formulaTextMin;
+export const CONNECTOR_LABEL_MIN = READABILITY_POLICY.connectorLabelMin;
 export const CONNECTOR_TRACK_MIN_GAP = 28;
 export const CONNECTOR_ANCHOR_EXIT_MIN = 24;
 export const CARD_GAP_MIN = 28;
@@ -26,6 +27,7 @@ export interface SemanticCompileOptions {
   fontScale?: number;
   imageScale?: number;
   fillImages?: boolean;
+  readabilityMode?: ReadabilityMode;
 }
 
 export interface SemanticCompileResult {

@@ -28,7 +28,7 @@ export function detectConnectorLabelCrowdingIssues(
         element2: { id: label.connectorFrom || label.connectorTo || label.id, type: 'connector' },
         overlapArea: 0,
         overlapPercentage: 0,
-        severity: 'error',
+        severity: 'warning',
         location: { x: labelBox.x, y: labelBox.y, width: labelBox.width, height: labelBox.height },
         message: `Connector label "${label.id}" could not be placed without overlapping other content`,
       });

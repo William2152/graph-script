@@ -60,6 +60,15 @@ export function generateReport(
   if (issues.some((issue) => issue.kind === 'connector_crowding')) {
     suggestions.push('Reroute semantic connectors so parallel segments do not share the same corridor or run too close together');
   }
+  if (issues.some((issue) => issue.kind === 'embed_too_small')) {
+    suggestions.push('Increase page cell size or allow the page to grow so embedded figures stay above the minimum readable scale');
+  }
+  if (issues.some((issue) => issue.kind === 'excessive_empty_space')) {
+    suggestions.push('Compact oversized containers or reduce empty page/panel slack so content occupies the available space more effectively');
+  }
+  if (issues.some((issue) => issue.kind === 'misaligned_siblings')) {
+    suggestions.push('Snap related sibling panels onto the same row/column tracks so repeated structures align cleanly');
+  }
 
   return {
     timestamp: new Date().toISOString(),

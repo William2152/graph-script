@@ -48,6 +48,7 @@ export async function compileSemanticDiagram(
   const imageScale = options.imageScale ?? 1;
   const fillImages = options.fillImages ?? false;
   const fontScale = options.fontScale ?? 1;
+  const readabilityMode = options.readabilityMode ?? 'auto';
   const semantic = elements.filter((element) => SEMANTIC_TYPES.has(element.type));
   const plain = elements.filter((element) => !SEMANTIC_TYPES.has(element.type));
 
@@ -125,13 +126,13 @@ export async function compileSemanticDiagram(
     lane.frame.h = Math.max(0, lane.frame.h - laneTop);
   }
 
-  let cards = await layoutCards(cardElements, lanes, values, traces, fontFamily, imageScale, fillImages, fontScale);
+  let cards = await layoutCards(cardElements, lanes, values, traces, fontFamily, imageScale, fillImages, fontScale, readabilityMode);
   lanes = compactLaneFrames(lanes, cards, contentX, contentWidth, separator ? 84 : 52);
   for (const lane of lanes) {
     lane.frame.y = laneTop;
     lane.frame.h = Math.max(0, height - laneTop);
   }
-  cards = await layoutCards(cardElements, lanes, values, traces, fontFamily, imageScale, fillImages, fontScale);
+  cards = await layoutCards(cardElements, lanes, values, traces, fontFamily, imageScale, fillImages, fontScale, readabilityMode);
   let contentBottom = Math.max(laneTop, ...cards.map((card) => card.y + card.height));
   const packedLeft = lanes.length ? Math.min(...lanes.map((lane) => lane.frame.x)) : contentX;
   const packedRight = lanes.length ? Math.max(...lanes.map((lane) => lane.frame.x + lane.frame.w)) : contentX + contentWidth;

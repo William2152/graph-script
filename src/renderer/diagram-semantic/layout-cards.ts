@@ -6,6 +6,7 @@ import { DiagramElement } from '../../ast/types';
 import { GSValue, Trace } from '../../runtime/values';
 import { resolveValue } from '../common';
 import { measureRichTextBlock, readLatexMode } from '../latex';
+import { ReadabilityMode } from '../readability-policy';
 import {
   BODY_TEXT_MIN,
   CARD_TITLE_MIN,
@@ -36,6 +37,7 @@ export async function layoutCards(
   imageScale: number = 1,
   fillImages: boolean = false,
   fontScale: number = 1,
+  readabilityMode: ReadabilityMode = 'auto',
 ): Promise<CardLayout[]> {
   const cards: CardLayout[] = [];
 
@@ -122,7 +124,10 @@ export async function layoutCards(
 
     for (const entry of measured) {
       const slotWidth = getSlotWidth(columnWidths, lane.gapX, entry.col - 1, entry.span);
-      const x = innerX + getColumnX(columnWidths, lane.gapX, entry.col - 1) + Math.max(0, (slotWidth - entry.width) / 2);
+      const slotX = innerX + getColumnX(columnWidths, lane.gapX, entry.col - 1);
+      const x = readabilityMode === 'legacy' || lane.columns === 1
+        ? slotX + Math.max(0, (slotWidth - entry.width) / 2)
+        : slotX;
       const y = rowY.get(entry.row) ?? lane.frame.y;
       const reservedHeight = spanHeight(rowHeights, entry.row, entry.rowSpan, lane.gapY);
       const height = entry.rowSpan > 1 ? Math.max(entry.height, reservedHeight) : entry.height;
@@ -204,14 +209,14 @@ async function measureCard(
   const titleBottomGap = titleBlock.height ? 12 : 0;
   const subtitleGap = subtitleBlock.height ? 8 : 0;
   const headerHeight = titleBlock.height || subtitleBlock.height
-    ? Math.max(58, headerTop + titleBlock.height + (subtitleBlock.height ? titleBottomGap + titleBlock.height + subtitleGap : 0) + 12)
+    ? Math.max(58, headerTop + titleBlock.height + (subtitleBlock.height ? titleBottomGap + subtitleBlock.height + subtitleGap : 0) + 12)
     : 28;
 
   const innerWidth = Math.max(140, width - padding * 2);
   const containerOptions = readContainerOptions(card, values, traces, 'stack', gap);
   const content = await layoutContainerChildren(card.children ?? [], innerWidth, containerOptions, values, traces, fontFamily, imageScale, fillImages, fontScale);
-  const bodyTop = headerHeight + padding;
-  const fallbackHeight = headerHeight + padding * 2 + (content.elements.length ? content.height : 52);
+  const bodyTop = headerHeight + Math.max(14, padding - 4);
+  const fallbackHeight = headerHeight + padding + (content.elements.length ? content.height : 52) + Math.max(18, padding - 2);
   const minHeight = getNumber(card, values, traces, 'min_h', 0);
   const compactWidth = clamp(Math.max(
     titleBlock.width ? titleBlock.width + 48 : 0,

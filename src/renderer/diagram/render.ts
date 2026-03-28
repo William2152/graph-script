@@ -3,6 +3,8 @@ import { GSValue, Trace } from '../../runtime/values';
 import { readBoolean, readNumber, readString, resolveValue, svgDocument } from '../common';
 import { compileSemanticDiagram } from '../diagram-semantic';
 import { DEFAULT_FONT_FAMILY, renderRichTextBlock } from '../latex';
+import { readReadabilityMode } from '../readability-policy';
+import { normalizeDiagramElementsForReadability } from './readability';
 import { createDiagramRenderContext } from './render-state';
 import { renderElements } from './render-tree';
 import { RenderEmbed } from './render-types';
@@ -24,13 +26,18 @@ export async function renderDiagram(
   const subtitle = readStringProperty(decl, values, traces, 'subtitle', '');
   const fontFamily = readStringProperty(decl, values, traces, 'font_family', DEFAULT_FONT_FAMILY);
   const fixedCanvas = readBooleanProperty(decl, values, traces, 'fixed_canvas', false);
+  const readabilityMode = readReadabilityMode(decl.properties.readability_mode, values, traces, 'auto');
 
   const compiled = await compileSemanticDiagram(decl.elements, values, traces, width, requestedHeight, {
     fontFamily,
     fontScale: renderOptions.fontScale,
     imageScale: renderOptions.imageScale,
     fillImages: renderOptions.fillImages,
+    readabilityMode,
   });
+  const elements = !compiled.hasSemantic
+    ? normalizeDiagramElementsForReadability(compiled.elements, values, traces, { mode: readabilityMode })
+    : compiled.elements;
 
   const finalWidth = compiled.hasSemantic && !fixedCanvas ? Math.max(640, compiled.minWidth) : width;
   const finalHeight = compiled.hasSemantic && !fixedCanvas ? Math.max(320, compiled.minHeight) : requestedHeight;
@@ -39,7 +46,7 @@ export async function renderDiagram(
   body += await renderHeaderTitle(title, finalWidth, fontFamily);
   body += await renderHeaderSubtitle(subtitle, finalWidth, fontFamily);
   body += await renderElements(
-    compiled.elements,
+    elements,
     createDiagramRenderContext(values, traces, renderEmbed, assetBaseDir, fontFamily, 0, 0),
   );
 

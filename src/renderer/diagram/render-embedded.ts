@@ -1,5 +1,6 @@
-import { escapeXml, extractSvgDocument, fitIntoBox, round } from '../common';
+import { escapeXml, extractSvgDocument, round } from '../common';
 import { renderRichTextBlock } from '../latex';
+import { fitIntoBoxWithReadableScale, resolveReadabilityMode } from '../readability-policy';
 import { ElementRenderState } from './render-state';
 import { resolveString } from './render-utils';
 
@@ -8,8 +9,15 @@ export async function renderEmbedElement(state: ElementRenderState): Promise<str
   const embedded = await state.renderEmbed(target);
   if (embedded) {
     const doc = extractSvgDocument(embedded);
-    const fit = fitIntoBox(doc.width, doc.height, state.w, state.h);
-    return `<g transform="translate(${round(state.x + fit.dx)}, ${round(state.y + fit.dy)}) scale(${round(fit.scale, 4)})">${doc.svg}</g>`;
+    const readabilityMode = resolveReadabilityMode(resolveString(state, 'readability_mode', 'auto'), 'auto');
+    let fit = readabilityMode === 'legacy'
+      ? fitIntoBoxWithReadableScale(doc.width, doc.height, state.w, state.h, { minScale: 0.1, verticalAlign: 'center' })
+      : fitIntoBoxWithReadableScale(doc.width, doc.height, state.w, state.h, { verticalAlign: 'top' });
+    if (readabilityMode !== 'legacy' && (fit.requiredWidth > state.w + 0.1 || fit.requiredHeight > state.h + 0.1)) {
+      fit = fitIntoBoxWithReadableScale(doc.width, doc.height, state.w, state.h, { minScale: 0.1, verticalAlign: 'top' });
+    }
+    const dy = readabilityMode === 'legacy' ? fit.dy : 0;
+    return `<g transform="translate(${round(state.x + fit.dx)}, ${round(state.y + dy)}) scale(${round(fit.scale, 4)})">${doc.svg}</g>`;
   }
   return `<rect x="${round(state.x)}" y="${round(state.y)}" width="${round(state.w)}" height="${round(state.h)}" fill="#f1f5f9" stroke="#cbd5e1" rx="12"/><text x="${round(state.x + state.w / 2)}" y="${round(state.y + state.h / 2)}" text-anchor="middle" font-size="14" font-family="${escapeXml(state.fontFamily)}" fill="#475569">Missing embed: ${escapeXml(target)}</text>`;
 }

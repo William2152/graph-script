@@ -9,6 +9,7 @@ import {
   GRAPH_LAYOUTS,
 } from './graph-types';
 import { clamp, getNumber, getString, makeElement } from './graph-utils';
+import { deriveGraphAutoVisuals, resolveReadabilityMode, READABILITY_POLICY } from './readability-policy';
 
 export type { CompiledGraphNode } from './graph-types';
 export type { CompiledGraphResult, GraphCompileOptions } from './graph-types';
@@ -37,6 +38,7 @@ export function compileGraphElement(
   }
 
   const includeOwnPosition = options.includeOwnPosition ?? false;
+  const readabilityMode = resolveReadabilityMode(getString(graph, values, traces, 'readability_mode', 'auto'), 'auto');
   const defaultWidth = Math.max(80, options.defaultWidth ?? 240);
   const width = clamp(
     getNumber(graph, values, traces, 'w', defaultWidth),
@@ -51,20 +53,24 @@ export function compileGraphElement(
   );
   const originX = includeOwnPosition ? getNumber(graph, values, traces, 'x', 0) : 0;
   const originY = includeOwnPosition ? getNumber(graph, values, traces, 'y', 0) : 0;
-  const padding = Math.max(0, getNumber(graph, values, traces, 'padding', 24));
   const layoutRaw = getString(graph, values, traces, 'layout', 'circle');
   const layout = GRAPH_LAYOUTS.has(layoutRaw) ? layoutRaw : 'circle';
   const seed = Math.max(1, Math.round(getNumber(graph, values, traces, 'seed', 1)));
   const iterations = Math.max(1, Math.round(getNumber(graph, values, traces, 'iterations', 120)));
+  const autoVisuals = deriveGraphAutoVisuals(width, height, Math.max(1, (graph.children ?? []).filter((child) => child.type === 'node').length));
+  const padding = Math.max(0, getNumber(graph, values, traces, 'padding', readabilityMode === 'legacy' ? 24 : autoVisuals.padding));
 
-  const defaultNodeRadius = Math.max(10, getNumber(graph, values, traces, 'node_radius', 24));
+  const defaultNodeRadius = Math.max(10, getNumber(graph, values, traces, 'node_radius', readabilityMode === 'legacy' ? 24 : autoVisuals.radius));
   const defaultNodeFill = getString(graph, values, traces, 'node_fill', '#2563eb');
   const defaultNodeStroke = getString(graph, values, traces, 'node_stroke', defaultNodeFill);
-  const defaultNodeStrokeWidth = Math.max(1, getNumber(graph, values, traces, 'node_strokeWidth', 2));
+  const defaultNodeStrokeWidth = Math.max(1, getNumber(graph, values, traces, 'node_strokeWidth', readabilityMode === 'legacy' ? 2 : Math.max(2, autoVisuals.edgeStrokeWidth * 0.72)));
   const defaultNodeColor = getString(graph, values, traces, 'node_color', '#ffffff');
-  const defaultNodeSize = Math.max(10, getNumber(graph, values, traces, 'node_size', Math.round(defaultNodeRadius * 0.9)));
+  const defaultNodeSize = Math.max(
+    READABILITY_POLICY.bodyTextMin,
+    getNumber(graph, values, traces, 'node_size', readabilityMode === 'legacy' ? Math.round(defaultNodeRadius * 0.9) : autoVisuals.labelSize),
+  );
   const defaultEdgeStroke = getString(graph, values, traces, 'edge_stroke', '#94a3b8');
-  const defaultEdgeStrokeWidth = Math.max(1, getNumber(graph, values, traces, 'edge_strokeWidth', 3));
+  const defaultEdgeStrokeWidth = Math.max(1, getNumber(graph, values, traces, 'edge_strokeWidth', readabilityMode === 'legacy' ? 3 : autoVisuals.edgeStrokeWidth));
   const defaultEdgeDash = getString(graph, values, traces, 'edge_dash', '');
 
   const nodeSpecs: GraphNodeSpec[] = [];

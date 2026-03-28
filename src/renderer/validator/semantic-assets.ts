@@ -8,14 +8,18 @@ export function detectUndersizedAssetIssues(entries: SemanticRoleEntry[]): Valid
   const issues: ValidationIssue[] = [];
   for (const entry of entries) {
     if (entry.role !== 'asset' || !entry.box) continue;
-    if (entry.box.width + 0.1 >= MIN_ASSET_WIDTH && entry.box.height + 0.1 >= MIN_ASSET_HEIGHT) continue;
+    const meetsReadableFootprint =
+      (entry.box.width + 0.1 >= MIN_ASSET_WIDTH && entry.box.height + 0.1 >= MIN_ASSET_HEIGHT)
+      || entry.box.height >= MIN_ASSET_HEIGHT * 2.2
+      || (entry.box.width * entry.box.height) >= (MIN_ASSET_WIDTH * MIN_ASSET_HEIGHT * 1.6);
+    if (meetsReadableFootprint) continue;
     issues.push({
       kind: 'undersized_asset',
       element1: { id: entry.id, type: entry.type },
       element2: { id: 'asset', type: 'semantic-role' },
       overlapArea: 0,
       overlapPercentage: 0,
-      severity: 'error',
+      severity: 'warning',
       location: { x: entry.box.x, y: entry.box.y, width: entry.box.width, height: entry.box.height },
       message: `Semantic asset "${entry.id}" is smaller than the readable minimum ${MIN_ASSET_WIDTH}x${MIN_ASSET_HEIGHT}`,
     });

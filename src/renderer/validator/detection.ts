@@ -3,6 +3,9 @@ import { GSValue, Trace } from '../../runtime/values';
 import { BoundingBox, ValidationIssue, OVERLAP_TOLERANCE, OVERLAP_TYPES_ALLOWED } from './types';
 import { getBooleanProperty, isIntendedOverlap, resolveElementBox, getNumberProperty } from './helpers';
 
+const CONTAINER_TYPES = new Set(['panel', 'box']);
+const CONTAINMENT_TOLERANCE = 4;
+
 export function extractBoundingBoxes(
   elements: DiagramElement[],
   values: Record<string, GSValue>,
@@ -66,6 +69,35 @@ export function calculateOverlap(
   };
 }
 
+function fullyContains(
+  container: BoundingBox,
+  item: BoundingBox,
+  tolerance = CONTAINMENT_TOLERANCE,
+): boolean {
+  return (
+    item.x >= container.x - tolerance
+    && item.y >= container.y - tolerance
+    && item.x + item.width <= container.x + container.width + tolerance
+    && item.y + item.height <= container.y + container.height + tolerance
+  );
+}
+
+function isLikelyContainedContent(container: BoundingBox, item: BoundingBox): boolean {
+  if (!CONTAINER_TYPES.has(container.type)) return false;
+  if (!fullyContains(container, item)) return false;
+
+  const containerArea = container.width * container.height;
+  const itemArea = item.width * item.height;
+  if (containerArea <= 0 || itemArea <= 0) return false;
+
+  const maxAreaRatio = container.type === 'box' && item.type === 'box' ? 0.82 : 0.9;
+  return itemArea / containerArea < maxAreaRatio;
+}
+
+export function isContainerContentContainment(a: BoundingBox, b: BoundingBox): boolean {
+  return isLikelyContainedContent(a, b) || isLikelyContainedContent(b, a);
+}
+
 export function detectOverlaps(
   boxes: BoundingBox[],
   tolerance = OVERLAP_TOLERANCE
@@ -80,6 +112,7 @@ export function detectOverlaps(
 
       if (a.allowOverlap || b.allowOverlap) continue;
       if ((a.ancestorIds ?? []).includes(b.id) || (b.ancestorIds ?? []).includes(a.id)) continue;
+      if (isContainerContentContainment(a, b)) continue;
 
       const aIsConnectorLabel = a.type === 'text' && a.id.includes('label');
       const bIsConnectorLabel = b.type === 'text' && b.id.includes('label');

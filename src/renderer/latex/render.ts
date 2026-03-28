@@ -1,20 +1,18 @@
-import { execFileSync } from 'child_process';
 import { escapeXml, round } from '../common';
 import {
   DEFAULT_FONT_FAMILY,
   FormulaMeasureResult,
   LatexMode,
-  MathFragment,
   RichTextLineLayout,
   RichTextRenderOptions,
   RichTextRenderResult,
   RichToken,
 } from './types';
 import { hasLatexDelimiters, normalizeFormulaForLatex, normalizeRichTextForLatex, stripMathDelimiters } from './normalize';
+import { EX_RATIO, measureTextWidth } from './measure';
+import { renderMathFragment, renderPlacedMath } from './math-svg';
 
-const EX_RATIO = 0.431;
-const mathCache = new Map<string, Promise<MathFragment>>();
-let mathJaxPromise: Promise<any> | null = null;
+export { measureTextWidth } from './measure';
 
 export async function measureDisplayFormula(
   value: string,
@@ -105,25 +103,6 @@ export async function renderRichTextBlock(value: string, options: RichTextRender
     mathFallbackCount: layout.mathFallbackCount,
     normalizedValue: layout.normalizedValue,
   };
-}
-
-export function measureTextWidth(value: string, fontSize: number, weight = '600', fontFamily = DEFAULT_FONT_FAMILY): number {
-  const normalized = value.replace(/\t/g, '    ');
-  if (!normalized) return 0;
-  if (isMonospace(fontFamily)) return normalized.length * fontSize * 0.62;
-
-  let width = 0;
-  for (const char of normalized) {
-    width += classifyGlyphWidth(char);
-  }
-
-  const numericWeight = Number.parseInt(weight, 10);
-  const weightFactor = Number.isFinite(numericWeight)
-    ? 1 + Math.max(0, numericWeight - 400) / 2000
-    : weight === 'bold'
-      ? 1.08
-      : 1;
-  return width * fontSize * weightFactor;
 }
 
 async function layoutRichText(
@@ -316,143 +295,4 @@ function coalesceTextTokens(tokens: RichToken[]): RichToken[] {
     collapsed[collapsed.length - 1].value += token.value;
   }
   return collapsed;
-}
-
-function classifyGlyphWidth(char: string): number {
-  if (char === ' ') return 0.34;
-  if (/[\t]/.test(char)) return 1.36;
-  if (/[.,;:'`!|]/.test(char)) return 0.24;
-  if (/[()\[\]{}]/.test(char)) return 0.34;
-  if (/[0-9]/.test(char)) return 0.56;
-  if (/[iljfrt]/.test(char)) return 0.32;
-  if (/[mw]/.test(char)) return 0.84;
-  if (/[A-Z]/.test(char)) {
-    if (/[MWQ@]/.test(char)) return 0.9;
-    if (/[IJ]/.test(char)) return 0.38;
-    return 0.68;
-  }
-  if (/[a-z]/.test(char)) return 0.54;
-  if (/[+\-=/<>]/.test(char)) return 0.58;
-  return 0.6;
-}
-
-function isMonospace(fontFamily: string): boolean {
-  return /mono|courier|consolas/i.test(fontFamily);
-}
-
-function renderPlacedMath(fragment: MathFragment, x: number, baselineY: number, anchor: 'start' | 'middle' | 'end', color: string): string {
-  const left = anchor === 'middle' ? x - fragment.width / 2 : anchor === 'end' ? x - fragment.width : x;
-  const top = baselineY - fragment.ascent;
-  const fallbackAttr = fragment.fallback ? ' data-math-fallback="true"' : '';
-  const normalizedAttr = fragment.normalizedValue ? ` data-latex="${escapeXml(fragment.normalizedValue)}"` : '';
-  return `<svg x="${round(left)}" y="${round(top)}" width="${round(fragment.width, 3)}" height="${round(fragment.height, 3)}" viewBox="${escapeXml(fragment.viewBox)}" overflow="visible" style="color:${escapeXml(color)}"${fallbackAttr}${normalizedAttr}>${fragment.body}</svg>`;
-}
-
-async function renderMathFragment(value: string, display: boolean, fontSize: number): Promise<MathFragment> {
-  const normalizedValue = normalizeFormulaForLatex(value);
-  const key = `${display ? 'display' : 'inline'}:${round(fontSize, 3)}:${normalizedValue}`;
-  if (!mathCache.has(key)) {
-    mathCache.set(key, buildMathFragment(normalizedValue, display, fontSize));
-  }
-  return mathCache.get(key)!;
-}
-
-async function buildMathFragment(value: string, display: boolean, fontSize: number): Promise<MathFragment> {
-  let html: string | null = null;
-  try {
-    const MathJax = await getMathJaxInProcess();
-    if (MathJax?.tex2svg && MathJax?.startup?.adaptor) {
-      const node = MathJax.tex2svg(value, { display, em: fontSize, ex: fontSize * EX_RATIO });
-      html = MathJax.startup.adaptor.outerHTML(node) as string;
-    }
-  } catch {
-    html = null;
-  }
-  if (!html) {
-    try {
-      html = renderMathSvgWithChildProcess(value, display, fontSize);
-    } catch {
-      return buildFallbackFragment(value, fontSize);
-    }
-  }
-  const svgMatch = html.match(/<svg\b([^>]*)>([\s\S]*?)<\/svg>/i);
-  if (!svgMatch) return buildFallbackFragment(value, fontSize);
-
-  const attrs = svgMatch[1];
-  const body = sanitizeMathSvgBody(svgMatch[2]);
-  const width = parseSvgLength(attrs.match(/\bwidth="([^"]+)"/)?.[1], fontSize);
-  const height = parseSvgLength(attrs.match(/\bheight="([^"]+)"/)?.[1], fontSize);
-  const viewBox = attrs.match(/\bviewBox="([^"]+)"/)?.[1] ?? `0 0 ${round(width, 3)} ${round(height, 3)}`;
-  const view = viewBox.split(/\s+/).map((part) => Number(part));
-  const minY = Number.isFinite(view[1]) ? view[1] : 0;
-  const viewHeight = Number.isFinite(view[3]) && view[3] > 0 ? view[3] : height;
-  const ascent = minY < 0 ? height * (-minY / viewHeight) : height * 0.8;
-  return { body, viewBox, width, height, ascent, fallback: false, normalizedValue: value };
-}
-
-function sanitizeMathSvgBody(body: string): string {
-  return body.replace(/\sdata-latex="([^"]*)"/g, (_match, rawValue: string) => ` data-latex="${escapeXml(rawValue)}"`);
-}
-
-function parseSvgLength(raw: string | undefined, fontSize: number): number {
-  if (!raw) return fontSize;
-  const match = raw.match(/^([0-9.]+)(ex|em|px)?$/);
-  if (!match) return Number(raw) || fontSize;
-  const value = Number(match[1]);
-  const unit = match[2] ?? 'px';
-  if (unit === 'ex') return value * fontSize * EX_RATIO;
-  if (unit === 'em') return value * fontSize;
-  return value;
-}
-
-function renderMathSvgWithChildProcess(value: string, display: boolean, fontSize: number): string {
-  const payload = JSON.stringify({ value, display, fontSize, ex: fontSize * EX_RATIO });
-  const script = `
-const payload = JSON.parse(process.env.GRAPHSCRIPT_MATHJAX_PAYLOAD || '{}');
-const mj = require('@mathjax/src/bundle/node-main.cjs');
-globalThis.MathJax = mj;
-(async () => {
-  const ready = await mj.init({ loader: { load: ['input/tex', 'output/svg'] } });
-  const node = ready.tex2svg(payload.value, { display: payload.display, em: payload.fontSize, ex: payload.ex });
-  const html = ready.startup.adaptor.outerHTML(node);
-  process.stdout.write(html);
-})().catch((error) => {
-  process.stderr.write(String(error && error.message ? error.message : error));
-  process.exit(1);
-});
-`;
-
-  return execFileSync(process.execPath, ['-e', script], {
-    cwd: process.cwd(),
-    env: { ...process.env, GRAPHSCRIPT_MATHJAX_PAYLOAD: payload },
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-}
-
-function buildFallbackFragment(value: string, fontSize: number): MathFragment {
-  const width = Math.max(fontSize, value.length * fontSize * 0.64);
-  const height = fontSize * 1.3;
-  const ascent = fontSize * 0.9;
-  const body = `<text x="0" y="${round(ascent)}" font-size="${round(fontSize)}" font-style="italic" font-family="${escapeXml(DEFAULT_FONT_FAMILY)}">${escapeXml(value)}</text>`;
-  return {
-    body,
-    viewBox: `0 0 ${round(width, 3)} ${round(height, 3)}`,
-    width,
-    height,
-    ascent,
-    fallback: true,
-    normalizedValue: value,
-  };
-}
-
-async function getMathJaxInProcess(): Promise<any> {
-  if (!mathJaxPromise) {
-    const mathJax = require('@mathjax/src/bundle/node-main.cjs');
-    (globalThis as any).MathJax = mathJax;
-    mathJaxPromise = mathJax.init({
-      loader: { load: ['input/tex', 'output/svg'] },
-    });
-  }
-  return mathJaxPromise;
 }

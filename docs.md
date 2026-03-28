@@ -12,7 +12,7 @@ Dengan file `.gs`, Anda bisa membuat:
 
 - chart 2D (`line`, `scatter`, `bar`, `area`, `pie`, `box`)
 - flowchart proses/algoritma
-- diagram bebas (shape, text, formula, image, connector, embed)
+- diagram bebas (shape, text, formula, graph, image, connector, embed)
 - semantic diagram (header/lane/card/connector)
 - tabel dari data array atau trace algoritma
 - plot 3D (`scatter3d`, `line3d`)
@@ -389,6 +389,7 @@ flow "Decision Process":
 | `text` | teks | `x y value size anchor color weight` |
 | `formula` | formula latex | `x y value size color` |
 | `circle`, `ellipse` | shape | `x y w h label fill stroke` |
+| `graph` | graf native dengan child `node` dan `edge` | `x y w h layout padding seed iterations` |
 | `grid`, `checker` | pola grid | `x y w h rows cols` |
 | `badge`, `callout` | anotasi | `x y w h label subtitle` |
 | `image` | gambar | `x y w h src fit opacity` |
@@ -406,6 +407,73 @@ diagram "Oracle":
   panel left x=60 y=120 w=360 h=220 label="Constant" fill="#dbeafe"
   panel right x=560 y=120 w=360 h=220 label="Balanced" fill="#fef3c7"
   arrow link x=420 y=230 x2=560 y2=230 label="f(x)"
+```
+
+#### Elemen `graph` (native graph drawing)
+
+- `graph` dipakai untuk menggambar graf secara native tanpa menyusun `circle` + `line` manual.
+- `graph` sendiri tidak menggambar background. Jika butuh panel/card, bungkus dengan `box`, `panel`, atau semantic `card`.
+- Child yang valid di dalam `graph` hanya:
+  - `node`
+  - `edge`
+
+Properti utama `graph`:
+
+- `x y w h`
+- `layout="manual|circle|force"`
+- `padding`
+- `seed`
+- `iterations`
+- default style graph-level:
+  - `node_radius`, `node_fill`, `node_stroke`, `node_color`, `node_size`
+  - `edge_stroke`, `edge_strokeWidth`, `edge_dash`
+
+Aturan:
+
+- `layout="manual"`: tiap `node` harus punya `x` dan `y` sebagai koordinat pusat node relatif ke box `graph`.
+- `layout="circle"`: posisi node dihitung otomatis dari urutan deklarasi node.
+- `layout="force"`: posisi node dihitung otomatis dengan force-like layout deterministik memakai `seed` dan `iterations`.
+- `edge from="..." to="..."` harus menunjuk ke `node` di graph yang sama.
+- `connector` semantic berbeda dari edge graph:
+  - `connector` untuk routing antar `card`
+  - `edge` untuk sisi pada graf
+
+Contoh `graph` di dalam `panel`:
+
+```graphscript
+diagram "K3 Example":
+  width = 900
+  height = 520
+
+  panel left x=60 y=80 w=320 h=320 label="Graf K3" fill="#f8fafc":
+    graph k3 x=36 y=74 w=248 h=210 layout="circle" padding=30 node_radius=22 node_size=18 edge_strokeWidth=4:
+      node n1 label="1" fill="#2563eb" stroke="#2563eb" color="#ffffff"
+      node n0 label="0" fill="#2563eb" stroke="#2563eb" color="#ffffff"
+      node n2 label="2" fill="#f97316" stroke="#f97316" color="#ffffff"
+      edge e10 from="n1" to="n0" stroke="#cbd5e1"
+      edge e12 from="n1" to="n2" stroke="#f97316" dash="10 6"
+      edge e02 from="n0" to="n2" stroke="#f97316" dash="10 6"
+```
+
+Contoh `graph` di dalam semantic `card`:
+
+```graphscript
+diagram "Semantic Graph":
+  width = 1200
+  height = 800
+  header top title="Graph Inside Card"
+  lane main section="main" order=1 columns=1
+
+  card graphCard section="main" row=1 label="Graph":
+    graph sample w=340 h=240 layout="force" seed=7 iterations=90:
+      node a label="a"
+      node b label="b"
+      node c label="c"
+      node d label="d"
+      edge ab from="a" to="b"
+      edge ac from="a" to="c"
+      edge bd from="b" to="d"
+      edge cd from="c" to="d"
 ```
 
 #### Semantic diagram (opsi lanjutan)
@@ -684,6 +752,7 @@ data:
 
 - Diagram biasa: posisi manual (`x,y,w,h`) lebih bebas.
 - Semantic: pakai `lane/card/connector` untuk auto layout dengan struktur presentasi.
+- Edge graf native dipakai di dalam `graph`; semantic `connector` tetap dipakai antar-card, bukan antar-node graf.
 
 ### Route connector semantic
 

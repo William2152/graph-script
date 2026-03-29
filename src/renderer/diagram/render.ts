@@ -1,10 +1,8 @@
 import { DiagramDeclaration } from '../../ast/types';
 import { GSValue, Trace } from '../../runtime/values';
 import { readBoolean, readNumber, readString, resolveValue, svgDocument } from '../common';
-import { compileSemanticDiagram } from '../diagram-semantic';
 import { DEFAULT_FONT_FAMILY, renderRichTextBlock } from '../latex';
-import { readReadabilityMode } from '../readability-policy';
-import { normalizeDiagramElementsForReadability } from './readability';
+import { prepareDiagramLayout } from './layout';
 import { createDiagramRenderContext } from './render-state';
 import { renderElements } from './render-tree';
 import { RenderEmbed } from './render-types';
@@ -19,34 +17,19 @@ export async function renderDiagram(
   assetBaseDir: string,
   renderOptions: { fontScale?: number; imageScale?: number; fillImages?: boolean } = {},
 ): Promise<string> {
-  const width = readNumberProperty(decl, values, traces, 'width', 1280);
-  const requestedHeight = readNumberProperty(decl, values, traces, 'height', 720);
   const background = readStringProperty(decl, values, traces, 'background', '#f8fafc');
   const title = readStringProperty(decl, values, traces, 'title', decl.name);
   const subtitle = readStringProperty(decl, values, traces, 'subtitle', '');
   const fontFamily = readStringProperty(decl, values, traces, 'font_family', DEFAULT_FONT_FAMILY);
-  const fixedCanvas = readBooleanProperty(decl, values, traces, 'fixed_canvas', false);
-  const readabilityMode = readReadabilityMode(decl.properties.readability_mode, values, traces, 'auto');
-
-  const compiled = await compileSemanticDiagram(decl.elements, values, traces, width, requestedHeight, {
-    fontFamily,
-    fontScale: renderOptions.fontScale,
-    imageScale: renderOptions.imageScale,
-    fillImages: renderOptions.fillImages,
-    readabilityMode,
-  });
-  const elements = !compiled.hasSemantic
-    ? await normalizeDiagramElementsForReadability(compiled.elements, values, traces, { mode: readabilityMode, fontFamily })
-    : compiled.elements;
-
-  const finalWidth = compiled.hasSemantic && !fixedCanvas ? Math.max(640, compiled.minWidth) : width;
-  const finalHeight = compiled.hasSemantic && !fixedCanvas ? Math.max(320, compiled.minHeight) : requestedHeight;
+  const prepared = await prepareDiagramLayout(decl, values, traces, renderOptions);
+  const finalWidth = prepared.width;
+  const finalHeight = prepared.height;
 
   let body = '';
   body += await renderHeaderTitle(title, finalWidth, fontFamily);
   body += await renderHeaderSubtitle(subtitle, finalWidth, fontFamily);
   body += await renderElements(
-    elements,
+    prepared.elements,
     createDiagramRenderContext(values, traces, renderEmbed, assetBaseDir, fontFamily, 0, 0),
   );
 
@@ -122,3 +105,5 @@ function readBooleanProperty(
   if (!expr) return fallback;
   return readBoolean(resolveValue(expr, values, traces), fallback);
 }
+
+export { prepareDiagramLayout } from './layout';

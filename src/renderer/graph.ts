@@ -9,7 +9,13 @@ import {
   GRAPH_LAYOUTS,
 } from './graph-types';
 import { clamp, getNumber, getString, makeElement } from './graph-utils';
-import { deriveGraphAutoVisuals, resolveReadabilityMode, READABILITY_POLICY } from './readability-policy';
+import {
+  deriveGraphAutoVisuals,
+  readSpacingDefaults,
+  resolveReadabilityMode,
+  resolveRendererLayoutMode,
+  READABILITY_POLICY,
+} from './readability-policy';
 
 export type { CompiledGraphNode } from './graph-types';
 export type { CompiledGraphResult, GraphCompileOptions } from './graph-types';
@@ -38,14 +44,16 @@ export function compileGraphElement(
   }
 
   const includeOwnPosition = options.includeOwnPosition ?? false;
+  const defaults = readSpacingDefaults('graph');
   const readabilityMode = resolveReadabilityMode(getString(graph, values, traces, 'readability_mode', 'auto'), 'auto');
-  const defaultWidth = Math.max(80, options.defaultWidth ?? 240);
+  const layoutMode = resolveRendererLayoutMode(getString(graph, values, traces, 'layout_mode', 'dynamic'), 'dynamic');
+  const defaultWidth = Math.max(80, options.defaultWidth ?? defaults.width);
   const width = clamp(
     getNumber(graph, values, traces, 'w', defaultWidth),
     80,
     options.maxWidth ?? Number.POSITIVE_INFINITY,
   );
-  const defaultHeight = Math.max(120, options.defaultHeight ?? Math.max(180, Math.round(width * 0.72)));
+  const defaultHeight = Math.max(120, options.defaultHeight ?? Math.max(defaults.minHeight, Math.round(width * 0.72)));
   const height = clamp(
     getNumber(graph, values, traces, 'h', defaultHeight),
     80,
@@ -58,7 +66,10 @@ export function compileGraphElement(
   const seed = Math.max(1, Math.round(getNumber(graph, values, traces, 'seed', 1)));
   const iterations = Math.max(1, Math.round(getNumber(graph, values, traces, 'iterations', 120)));
   const autoVisuals = deriveGraphAutoVisuals(width, height, Math.max(1, (graph.children ?? []).filter((child) => child.type === 'node').length));
-  const padding = Math.max(0, getNumber(graph, values, traces, 'padding', readabilityMode === 'legacy' ? 24 : autoVisuals.padding));
+  const padding = Math.max(
+    0,
+    getNumber(graph, values, traces, 'padding', readabilityMode === 'legacy' ? defaults.spacing.padding : autoVisuals.padding),
+  );
 
   const defaultNodeRadius = Math.max(10, getNumber(graph, values, traces, 'node_radius', readabilityMode === 'legacy' ? 24 : autoVisuals.radius));
   const defaultNodeFill = getString(graph, values, traces, 'node_fill', '#2563eb');
@@ -94,8 +105,8 @@ export function compileGraphElement(
         strokeWidth: Math.max(1, getNumber(child, values, traces, 'strokeWidth', defaultNodeStrokeWidth)),
         color: getString(child, values, traces, 'color', defaultNodeColor),
         size: Math.max(10, getNumber(child, values, traces, 'size', defaultNodeSize)),
-        x: child.properties.x ? getNumber(child, values, traces, 'x', 0) : undefined,
-        y: child.properties.y ? getNumber(child, values, traces, 'y', 0) : undefined,
+        x: layoutMode === 'manual' && child.properties.x ? getNumber(child, values, traces, 'x', 0) : undefined,
+        y: layoutMode === 'manual' && child.properties.y ? getNumber(child, values, traces, 'y', 0) : undefined,
       });
       continue;
     }
@@ -127,7 +138,13 @@ export function compileGraphElement(
 
   const nodeMap = new Map(positionedNodes.map((node) => [node.id, node]));
   const elements: DiagramElement[] = [];
-  const graphMarker = { compiled_from_graph: true, graph_source: graph.name };
+  const graphMarker = {
+    compiled_from_graph: true,
+    graph_source: graph.name,
+    ...(layoutMode !== 'manual' && (graph.children ?? []).some((child) => child.type === 'node' && (child.properties.x != null || child.properties.y != null))
+      ? { manual_coordinates_ignored: true }
+      : {}),
+  };
 
   for (const edge of edgeSpecs) {
     const fromNode = nodeMap.get(edge.from);

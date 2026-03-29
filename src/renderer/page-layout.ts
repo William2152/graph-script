@@ -1,24 +1,35 @@
 import {
   ChartDeclaration,
   DiagramDeclaration,
+  ErdDeclaration,
   FlowDeclaration,
+  InfraDeclaration,
   PageDeclaration,
   Plot3dDeclaration,
+  Scene3dDeclaration,
   TableDeclaration,
 } from '../ast/types';
 import { GSValue, Trace } from '../runtime/values';
 import { buildChartSeries, extractChartConfig } from './chart';
 import { readBoolean, readNumber, readString, resolveValue } from './common';
-import { compileSemanticDiagram } from './diagram-semantic';
 import { layoutFlow } from './flow';
+import { planErdLayout } from './erd';
+import { planInfraLayout } from './infra';
 import { DEFAULT_FONT_FAMILY } from './latex';
 import {
   fitIntoBoxWithReadableScale,
   ReadabilityMode,
+  hasExplicitProperty,
+  readRendererSizeMode,
   readReadabilityMode,
+  resolveRendererExtent,
+  readSpacingDefaults,
   READABILITY_POLICY,
 } from './readability-policy';
-import { buildTableData } from './table';
+import { prepareDiagramLayout } from './diagram';
+import { buildPlot3d } from './plot3d';
+import { planScene3dLayout } from './scene3d';
+import { planTableLayout } from './table';
 
 export interface PageTargetDocument {
   target: string;
@@ -95,45 +106,40 @@ export async function estimateDeclarationCanvasSize(
 
   switch (decl.type) {
     case 'DiagramDeclaration': {
-      const diagram = decl as DiagramDeclaration;
-      const width = readNumber(resolveValue(diagram.properties.width, values, traces), 1280);
-      const requestedHeight = readNumber(resolveValue(diagram.properties.height, values, traces), 720);
-      const fontFamily = readString(resolveValue(diagram.properties.font_family, values, traces), DEFAULT_FONT_FAMILY);
-      const fixedCanvas = readBoolean(resolveValue(diagram.properties.fixed_canvas, values, traces), false);
-      const compiled = await compileSemanticDiagram(diagram.elements, values, traces, width, requestedHeight, {
-        fontFamily,
-        readabilityMode: readReadabilityMode(diagram.properties.readability_mode, values, traces, 'auto'),
-      });
-      return {
-        width: compiled.hasSemantic && !fixedCanvas ? Math.max(640, compiled.minWidth) : width,
-        height: compiled.hasSemantic && !fixedCanvas ? Math.max(320, compiled.minHeight) : requestedHeight,
-      };
+      const prepared = await prepareDiagramLayout(decl as DiagramDeclaration, values, traces);
+      return { width: prepared.width, height: prepared.height };
     }
     case 'FlowDeclaration': {
       const flow = layoutFlow(decl as FlowDeclaration);
       return { width: flow.width, height: flow.height };
     }
     case 'ChartDeclaration': {
-      const config = extractChartConfig(decl as ChartDeclaration, values, traces);
       const series = buildChartSeries(decl as ChartDeclaration, values, traces);
+      const config = extractChartConfig(decl as ChartDeclaration, values, traces, series);
       return {
         width: config.width,
         height: series.length ? config.height : Math.max(320, config.height),
       };
     }
     case 'TableDeclaration': {
-      const table = buildTableData(decl as TableDeclaration, values, traces);
-      const approxColumnWidths = table.columns.map((column) => Math.max(96, column.length * 8 + 24));
-      const width = Math.max(420, approxColumnWidths.reduce((sum, value) => sum + value, 0) + 48);
-      const height = 48 + 36 + Math.max(table.rows.length, 1) * 32 + 48;
-      return { width, height };
+      const plan = planTableLayout(decl as TableDeclaration, values, traces);
+      return { width: plan.width, height: plan.height };
     }
     case 'Plot3dDeclaration': {
-      const plot = decl as Plot3dDeclaration;
-      return {
-        width: readNumber(resolveValue(plot.properties.width, values, traces), 760),
-        height: readNumber(resolveValue(plot.properties.height, values, traces), 520),
-      };
+      const { config } = buildPlot3d(decl as Plot3dDeclaration, values, traces);
+      return { width: config.width, height: config.height };
+    }
+    case 'ErdDeclaration': {
+      const plan = planErdLayout(decl as ErdDeclaration, values, traces);
+      return { width: plan.width, height: plan.height };
+    }
+    case 'InfraDeclaration': {
+      const plan = planInfraLayout(decl as InfraDeclaration, values, traces);
+      return { width: plan.width, height: plan.height };
+    }
+    case 'Scene3dDeclaration': {
+      const plan = planScene3dLayout(decl as Scene3dDeclaration, values, traces);
+      return { width: plan.width, height: plan.height };
     }
     case 'PageDeclaration': {
       const page = decl as PageDeclaration;
@@ -164,19 +170,26 @@ export function planPageLayout(
   traces: Map<string, Trace>,
   options: PageLayoutOptions = {},
 ): PageLayoutPlan {
-  const requestedWidth = readNumber(resolveValue(decl.properties.width, values, traces), 1440);
-  const requestedHeight = readNumber(resolveValue(decl.properties.height, values, traces), 900);
-  const columns = Math.max(1, readNumber(resolveValue(decl.properties.columns, values, traces), 2));
+  const defaults = readSpacingDefaults('page');
+  const explicitWidth = hasExplicitProperty(decl.properties.width);
+  const explicitHeight = hasExplicitProperty(decl.properties.height);
+  const explicitColumns = hasExplicitProperty(decl.properties.columns);
+  const explicitRows = hasExplicitProperty(decl.properties.rows);
+  const requestedWidth = readNumber(resolveValue(decl.properties.width, values, traces), defaults.width);
+  const requestedHeight = readNumber(resolveValue(decl.properties.height, values, traces), defaults.height);
+  const autoColumns = Math.max(1, Math.ceil(Math.sqrt(Math.max(decl.placements.length, 1))));
+  const columns = Math.max(1, readNumber(resolveValue(decl.properties.columns, values, traces), Math.min(3, autoColumns)));
   const rows = Math.max(1, readNumber(resolveValue(
     decl.properties.rows,
     values,
     traces,
   ), Math.max(1, Math.ceil(decl.placements.length / Math.max(columns, 1)))));
-  const gap = Math.max(0, readNumber(resolveValue(decl.properties.gap, values, traces), 24));
-  const margin = Math.max(24, readNumber(resolveValue(decl.properties.margin, values, traces), 32));
+  const gap = Math.max(0, readNumber(resolveValue(decl.properties.gap, values, traces), defaults.spacing.gap));
+  const margin = Math.max(24, readNumber(resolveValue(decl.properties.margin, values, traces), defaults.spacing.margin));
   const subtitle = readString(resolveValue(decl.properties.subtitle, values, traces), '');
   const topOffset = subtitle ? 108 : 84;
   const readabilityMode = options.readabilityMode ?? readReadabilityMode(decl.properties.readability_mode, values, traces, 'auto');
+  const sizeMode = readRendererSizeMode(decl.properties.size_mode, values, traces, 'dynamic');
   const minEmbedScale = Math.max(0.1, options.minEmbedScale ?? readNumber(
     resolveValue(decl.properties.min_embed_scale, values, traces),
     READABILITY_POLICY.minEmbedScale,
@@ -206,9 +219,14 @@ export function planPageLayout(
     }
   }
 
-  const width = Math.max(
+  const computedWidth = margin * 2 + colWidths.reduce((sum, value) => sum + value, 0) + gap * Math.max(0, columns - 1);
+  const width = resolveRendererExtent(
+    explicitWidth,
     requestedWidth,
-    margin * 2 + colWidths.reduce((sum, value) => sum + value, 0) + gap * Math.max(0, columns - 1),
+    defaults.width,
+    sizeMode,
+    computedWidth,
+    defaults.minWidth,
   );
   const rowHeights = Array.from({ length: rows }, () => defaultCellHeight);
 
@@ -229,9 +247,14 @@ export function planPageLayout(
     }
   }
 
-  const height = Math.max(
+  const computedHeight = topOffset + rowHeights.reduce((sum, value) => sum + value, 0) + gap * Math.max(0, rows - 1) + margin;
+  const height = resolveRendererExtent(
+    explicitHeight,
     requestedHeight,
-    topOffset + rowHeights.reduce((sum, value) => sum + value, 0) + gap * Math.max(0, rows - 1) + margin,
+    defaults.height,
+    sizeMode,
+    computedHeight,
+    defaults.minHeight,
   );
 
   const colX: number[] = [];

@@ -1,26 +1,108 @@
 import { InfraDeclaration, InfraElement } from '../ast/types';
 import { GSValue, Trace } from '../runtime/values';
 import { escapeXml, readNumber, readString, resolveValue, round, svgDocument } from './common';
+import {
+  hasExplicitProperty,
+  readRendererLayoutMode,
+  readRendererSizeMode,
+  resolveRendererExtent,
+  readSpacingDefaults,
+} from './readability-policy';
 
-export function renderInfra(decl: InfraDeclaration, values: Record<string, GSValue>, traces: Map<string, Trace>): string {
-  const width = readNumber(resolveValue(decl.properties.width, values, traces), 1100);
-  const height = readNumber(resolveValue(decl.properties.height, values, traces), 700);
-  const auto = autoLayout(decl.elements, width, height);
-  const positions = new Map<string, { x: number; y: number; w: number; h: number; type: string; label: string }>();
+interface InfraNodeLayout {
+  name: string;
+  type: string;
+  label: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
-  decl.elements.forEach((element, index) => {
-    const fallback = auto[index];
-    const x = readNumber(resolveValue(element.properties.x, values, traces), fallback.x);
-    const y = readNumber(resolveValue(element.properties.y, values, traces), fallback.y);
-    const w = readNumber(resolveValue(element.properties.w, values, traces), 150);
-    const h = readNumber(resolveValue(element.properties.h, values, traces), 72);
+export interface InfraLayoutPlan {
+  width: number;
+  height: number;
+  titleY: number;
+  subtitleY: number;
+  nodes: InfraNodeLayout[];
+}
+
+export function planInfraLayout(
+  decl: InfraDeclaration,
+  values: Record<string, GSValue>,
+  traces: Map<string, Trace>,
+): InfraLayoutPlan {
+  const defaults = readSpacingDefaults('infra');
+  const explicitWidth = hasExplicitProperty(decl.properties.width);
+  const explicitHeight = hasExplicitProperty(decl.properties.height);
+  const requestedWidth = readNumber(resolveValue(decl.properties.width, values, traces), defaults.width);
+  const requestedHeight = readNumber(resolveValue(decl.properties.height, values, traces), defaults.height);
+  const layoutMode = readRendererLayoutMode(decl.properties.layout_mode, values, traces, 'dynamic');
+  const sizeMode = readRendererSizeMode(decl.properties.size_mode, values, traces, 'dynamic');
+  const margin = Math.max(32, readNumber(resolveValue(decl.properties.margin, values, traces), defaults.spacing.margin));
+  const gap = Math.max(20, readNumber(resolveValue(decl.properties.gap, values, traces), defaults.spacing.gap));
+  const topOffset = 112;
+  const columns = Math.max(1, Math.round(readNumber(resolveValue(decl.properties.columns, values, traces), Math.ceil(Math.sqrt(Math.max(decl.elements.length, 1))))));
+
+  const nodeSpecs = decl.elements.map((element) => {
     const label = readString(resolveValue(element.properties.label, values, traces), element.name);
-    positions.set(element.name, { x, y, w, h, type: element.type, label });
+    const estimated = estimateInfraElementSize(element.type, label);
+    return {
+      element,
+      type: element.type,
+      label,
+      w: readNumber(resolveValue(element.properties.w, values, traces), estimated.w),
+      h: readNumber(resolveValue(element.properties.h, values, traces), estimated.h),
+    };
   });
 
+  const positions = layoutMode === 'manual'
+    ? nodeSpecs.map((entry, index) => ({
+        name: entry.element.name,
+        type: entry.type,
+        label: entry.label,
+        w: entry.w,
+        h: entry.h,
+        x: readNumber(resolveValue(entry.element.properties.x, values, traces), margin + (index % columns) * (entry.w + gap)),
+        y: readNumber(resolveValue(entry.element.properties.y, values, traces), topOffset + Math.floor(index / columns) * (entry.h + gap)),
+      }))
+    : autoLayoutInfraNodes(nodeSpecs, margin, topOffset, gap, columns);
+
+  const maxRight = Math.max(...positions.map((position) => position.x + position.w), margin + defaults.minWidth - margin);
+  const maxBottom = Math.max(...positions.map((position) => position.y + position.h), topOffset + defaults.minHeight - margin);
+
+  return {
+    width: resolveRendererExtent(
+      explicitWidth,
+      requestedWidth,
+      defaults.width,
+      sizeMode,
+      Math.ceil(maxRight + margin),
+      defaults.minWidth,
+      layoutMode === 'manual',
+    ),
+    height: resolveRendererExtent(
+      explicitHeight,
+      requestedHeight,
+      defaults.height,
+      sizeMode,
+      Math.ceil(maxBottom + margin),
+      defaults.minHeight,
+      layoutMode === 'manual',
+    ),
+    titleY: 42,
+    subtitleY: 68,
+    nodes: positions,
+  };
+}
+
+export function renderInfra(decl: InfraDeclaration, values: Record<string, GSValue>, traces: Map<string, Trace>): string {
+  const plan = planInfraLayout(decl, values, traces);
+  const positions = new Map(plan.nodes.map((node) => [node.name, node]));
+
   let body = '';
-  body += `<text x="${width / 2}" y="42" text-anchor="middle" font-size="30" font-weight="800" fill="#0f172a">${escapeXml(decl.name)}</text>`;
-  body += `<text x="${width / 2}" y="68" text-anchor="middle" font-size="14" fill="#64748b">Provider: ${escapeXml(decl.provider)}</text>`;
+  body += `<text x="${plan.width / 2}" y="${plan.titleY}" text-anchor="middle" font-size="30" font-weight="800" fill="#0f172a">${escapeXml(decl.name)}</text>`;
+  body += `<text x="${plan.width / 2}" y="${plan.subtitleY}" text-anchor="middle" font-size="14" fill="#64748b">Provider: ${escapeXml(decl.provider)}</text>`;
 
   decl.connections.forEach((connection, index) => {
     const a = positions.get(connection.from);
@@ -38,26 +120,61 @@ export function renderInfra(decl: InfraDeclaration, values: Record<string, GSVal
     }
   });
 
-  decl.elements.forEach((element) => {
-    const pos = positions.get(element.name);
-    if (!pos) return;
-    body += renderInfraElement(pos.x, pos.y, pos.w, pos.h, pos.type, pos.label);
+  plan.nodes.forEach((node) => {
+    body += renderInfraElement(node.x, node.y, node.w, node.h, node.type, node.label);
   });
 
-  return svgDocument(width, height, body, '#f8fafc');
+  return svgDocument(plan.width, plan.height, body, '#f8fafc');
 }
 
-function autoLayout(elements: InfraElement[], width: number, height: number): { x: number; y: number }[] {
-  const cols = Math.ceil(Math.sqrt(Math.max(elements.length, 1)));
-  const rows = Math.ceil(Math.max(elements.length, 1) / cols);
-  const paddingX = 90;
-  const paddingY = 120;
-  const gapX = (width - paddingX * 2) / Math.max(cols, 1);
-  const gapY = (height - paddingY * 2) / Math.max(rows, 1);
-  return elements.map((_, index) => ({
-    x: paddingX + (index % cols) * gapX + 20,
-    y: paddingY + Math.floor(index / cols) * gapY,
-  }));
+function autoLayoutInfraNodes(
+  specs: Array<{ element: InfraElement; type: string; label: string; w: number; h: number }>,
+  margin: number,
+  topOffset: number,
+  gap: number,
+  columns: number,
+): InfraNodeLayout[] {
+  const rows = Math.max(1, Math.ceil(specs.length / Math.max(columns, 1)));
+  const columnWidths = Array.from({ length: columns }, (_, column) =>
+    Math.max(...specs.filter((_, index) => index % columns === column).map((entry) => entry.w), 180));
+  const rowHeights = Array.from({ length: rows }, (_, row) =>
+    Math.max(...specs.filter((_, index) => Math.floor(index / columns) === row).map((entry) => entry.h), 84));
+
+  return specs.map((entry, index) => {
+    const col = index % columns;
+    const row = Math.floor(index / columns);
+    const x = margin + columnWidths.slice(0, col).reduce((sum, value) => sum + value, 0) + gap * col;
+    const y = topOffset + rowHeights.slice(0, row).reduce((sum, value) => sum + value, 0) + gap * row;
+    return {
+      name: entry.element.name,
+      type: entry.type,
+      label: entry.label,
+      w: entry.w,
+      h: entry.h,
+      x,
+      y,
+    };
+  });
+}
+
+function estimateInfraElementSize(type: string, label: string): { w: number; h: number } {
+  const kind = type.toLowerCase();
+  const labelWidth = Math.max(120, label.length * 8 + 52);
+  switch (kind) {
+    case 'db':
+    case 'database':
+    case 'storage':
+    case 'bucket':
+      return { w: Math.max(170, labelWidth), h: 88 };
+    case 'user':
+    case 'internet':
+      return { w: Math.max(144, labelWidth * 0.92), h: 80 };
+    case 'queue':
+    case 'topic':
+      return { w: Math.max(168, labelWidth), h: 78 };
+    default:
+      return { w: Math.max(168, labelWidth), h: 76 };
+  }
 }
 
 function renderInfraElement(x: number, y: number, w: number, h: number, type: string, label: string): string {

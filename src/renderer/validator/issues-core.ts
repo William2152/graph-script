@@ -91,7 +91,10 @@ export function detectGapIssues(
       const semanticRole = getStringProperty(element, values, traces, 'semantic_role', '');
       const minGap = Math.max(MIN_LAYOUT_GAP, getNumberProperty(element, values, traces, 'min_gap', MIN_LAYOUT_GAP));
       const childBoxes = element.children
-        .filter((child) => !OVERLAP_TYPES_ALLOWED.has(child.type) && !getBooleanProperty(child, values, traces, 'validation_ignore', false))
+        .filter((child) =>
+          !OVERLAP_TYPES_ALLOWED.has(child.type)
+          && !getBooleanProperty(child, values, traces, 'validation_ignore', false)
+          && !getBooleanProperty(child, values, traces, 'compiled_from_graph', false))
         .map((child) => absoluteBox(child, values, traces, x, y))
         .filter((box): box is BoundingBox => box !== null);
       const shouldCheckSiblingGaps = hasExplicitGap || !!semanticRole || !BOX_LIKE_TYPES.has(element.type);

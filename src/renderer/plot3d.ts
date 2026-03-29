@@ -1,5 +1,11 @@
 import { Expression, Plot3dDeclaration } from '../ast/types';
 import { GSValue, Trace } from '../runtime/values';
+import {
+  hasExplicitProperty,
+  readRendererSizeMode,
+  readSpacingDefaults,
+  resolveRendererExtent,
+} from './readability-policy';
 
 interface Plot3dSeries {
   x: number[];
@@ -12,9 +18,11 @@ interface Plot3dConfig {
   type: 'scatter3d' | 'line3d';
   width: number;
   height: number;
+  padding: number;
 }
 
 export function buildPlot3d(decl: Plot3dDeclaration, values: Record<string, GSValue>, traces: Map<string, Trace>): { config: Plot3dConfig; series: Plot3dSeries | null } {
+  const defaults = readSpacingDefaults('plot3d');
   const typeValue = resolveValue(decl.properties.type, values, traces);
   const widthValue = resolveValue(decl.properties.width, values, traces);
   const heightValue = resolveValue(decl.properties.height, values, traces);
@@ -22,12 +30,36 @@ export function buildPlot3d(decl: Plot3dDeclaration, values: Record<string, GSVa
   const x = asNumberArray(resolveValue(decl.properties.x, values, traces));
   const y = asNumberArray(resolveValue(decl.properties.y, values, traces));
   const z = asNumberArray(resolveValue(decl.properties.z, values, traces));
+  const explicitWidth = hasExplicitProperty(decl.properties.width);
+  const explicitHeight = hasExplicitProperty(decl.properties.height);
+  const sizeMode = readRendererSizeMode(decl.properties.size_mode, values, traces, 'dynamic');
+  const dynamicWidth = Math.max(defaults.minWidth, defaults.width + Math.min(220, Math.max(x.length, y.length, z.length) * 6));
+  const dynamicHeight = Math.max(defaults.minHeight, Math.round(dynamicWidth * 0.68));
+  const requestedWidth = typeof widthValue === 'number' ? widthValue : defaults.width;
+  const requestedHeight = typeof heightValue === 'number' ? heightValue : defaults.height;
 
   const config: Plot3dConfig = {
     title: typeof titleValue === 'string' ? titleValue : decl.name,
     type: typeValue === 'line3d' ? 'line3d' : 'scatter3d',
-    width: typeof widthValue === 'number' ? widthValue : 760,
-    height: typeof heightValue === 'number' ? heightValue : 520,
+    width: resolveRendererExtent(
+      explicitWidth,
+      requestedWidth,
+      defaults.width,
+      sizeMode,
+      dynamicWidth,
+      defaults.minWidth,
+    ),
+    height: resolveRendererExtent(
+      explicitHeight,
+      requestedHeight,
+      defaults.height,
+      sizeMode,
+      dynamicHeight,
+      defaults.minHeight,
+    ),
+    padding: typeof resolveValue(decl.properties.padding, values, traces) === 'number'
+      ? resolveValue(decl.properties.padding, values, traces)
+      : defaults.spacing.padding,
   };
 
   if (!x.length || x.length !== y.length || y.length !== z.length) {
@@ -38,7 +70,7 @@ export function buildPlot3d(decl: Plot3dDeclaration, values: Record<string, GSVa
 }
 
 export function renderPlot3d(config: Plot3dConfig, series: Plot3dSeries): string {
-  const padding = 64;
+  const padding = config.padding;
   const points = series.x.map((x, index) => projectPoint(x, series.y[index], series.z[index]));
   const guidePoints = [projectPoint(-1.2, 0, 0), projectPoint(1.2, 0, 0), projectPoint(0, -1.2, 0), projectPoint(0, 1.2, 0), projectPoint(0, 0, -1.2), projectPoint(0, 0, 1.2)];
   const boundsPoints = [...points, ...guidePoints];

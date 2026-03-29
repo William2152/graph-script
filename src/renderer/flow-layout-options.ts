@@ -6,12 +6,20 @@ import {
   LayoutMode,
   ResolvedFlowOptions,
 } from './flow-types';
-import { resolveReadabilityMode, READABILITY_POLICY } from './readability-policy';
+import {
+  hasExplicitProperty,
+  readSpacingDefaults,
+  resolveReadabilityMode,
+  resolveRendererLayoutMode,
+  resolveRendererSizeMode,
+  READABILITY_POLICY,
+} from './readability-policy';
 
 /**
  * Reads and normalizes flow layout options from declaration properties.
  */
 export function resolveFlowOptions(flow: FlowDeclaration): ResolvedFlowOptions {
+  const defaults = readSpacingDefaults('flow');
   const direction = resolveDirection(flow);
   const preferredFontSize = Math.max(16, readFlowNumber(flow.properties.preferred_font_size, 17));
   const readabilityMode = resolveReadabilityMode(readFlowString(flow.properties.readability_mode, 'auto'), 'auto');
@@ -19,18 +27,35 @@ export function resolveFlowOptions(flow: FlowDeclaration): ResolvedFlowOptions {
     preferredFontSize,
     Math.max(READABILITY_POLICY.flowFontMin, readFlowNumber(flow.properties.min_font_size, READABILITY_POLICY.flowFontMin)),
   );
-  const layoutMode = readFlowString(flow.properties.layout_mode, 'auto');
+  const rawLayoutMode = readFlowString(flow.properties.layout_mode, 'auto');
+  const placementMode = rawLayoutMode === 'manual' || rawLayoutMode === 'dynamic'
+    ? resolveRendererLayoutMode(rawLayoutMode, 'dynamic')
+    : resolveRendererLayoutMode(readFlowString(flow.properties.placement_mode, 'dynamic'), 'dynamic');
+  const layoutMode = rawLayoutMode === 'manual' || rawLayoutMode === 'dynamic'
+    ? readFlowString(flow.properties.flow_layout, 'auto')
+    : rawLayoutMode;
+  const sizeMode = resolveRendererSizeMode(readFlowString(flow.properties.size_mode, 'dynamic'), 'dynamic');
   const fit = readFlowString(flow.properties.fit, 'readable') === 'compact' ? 'compact' : 'readable';
+  const explicitTargetWidth = hasExplicitProperty(flow.properties.target_width);
+  const explicitTargetHeight = hasExplicitProperty(flow.properties.target_height);
+  const padding = Math.max(24, readFlowNumber(flow.properties.padding, defaults.spacing.padding));
+  const horizontalGap = Math.max(36, readFlowNumber(flow.properties.gap_x, readFlowNumber(flow.properties.gap, defaults.spacing.gap)));
+  const verticalGap = Math.max(44, readFlowNumber(flow.properties.gap_y, readFlowNumber(flow.properties.gap, defaults.spacing.gap + 12)));
 
   return {
-    targetWidth: Math.max(900, readFlowNumber(flow.properties.target_width, DEFAULT_TARGET_WIDTH)),
-    targetHeight: Math.max(420, readFlowNumber(flow.properties.target_height, DEFAULT_TARGET_HEIGHT)),
+    targetWidth: Math.max(900, readFlowNumber(flow.properties.target_width, explicitTargetWidth ? DEFAULT_TARGET_WIDTH : defaults.width)),
+    targetHeight: Math.max(420, readFlowNumber(flow.properties.target_height, explicitTargetHeight ? DEFAULT_TARGET_HEIGHT : defaults.height)),
     minFontSize,
     preferredFontSize,
+    placementMode,
+    sizeMode,
     layoutMode: normalizeLayoutMode(layoutMode),
     fit,
     direction,
     readabilityMode,
+    padding,
+    horizontalGap,
+    verticalGap,
   };
 }
 

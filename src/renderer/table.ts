@@ -1,10 +1,27 @@
 import { Expression, TableDeclaration } from '../ast/types';
 import { GSValue, Trace } from '../runtime/values';
+import {
+  hasExplicitProperty,
+  readRendererSizeMode,
+  readSpacingDefaults,
+  resolveRendererExtent,
+} from './readability-policy';
 
 interface TableData {
   title?: string;
   columns: string[];
   rows: string[][];
+}
+
+export interface TableLayoutPlan {
+  table: TableData;
+  width: number;
+  height: number;
+  padding: number;
+  rowHeight: number;
+  headerHeight: number;
+  fontSize: number;
+  widths: number[];
 }
 
 export function buildTableData(decl: TableDeclaration, values: Record<string, GSValue>, traces: Map<string, Trace>): TableData {
@@ -48,18 +65,56 @@ export function buildTableData(decl: TableDeclaration, values: Record<string, GS
   return { title: decl.name, columns, rows: [] };
 }
 
-export function renderTable(table: TableData): string {
-  const padding = 24;
-  const rowHeight = 32;
-  const fontSize = 12;
+export function planTableLayout(
+  decl: TableDeclaration,
+  values: Record<string, GSValue>,
+  traces: Map<string, Trace>,
+): TableLayoutPlan {
+  const defaults = readSpacingDefaults('table');
+  const table = buildTableData(decl, values, traces);
+  const explicitWidth = hasExplicitProperty(decl.properties.width);
+  const explicitHeight = hasExplicitProperty(decl.properties.height);
+  const paddingValue = resolveValue(decl.properties.padding, values, traces);
+  const rowHeightValue = resolveValue(decl.properties.row_height, values, traces);
+  const fontSizeValue = resolveValue(decl.properties.font_size, values, traces);
+  const headerHeightValue = resolveValue(decl.properties.header_height, values, traces);
+  const padding = Math.max(16, typeof paddingValue === 'number' ? paddingValue : defaults.spacing.padding);
+  const rowHeight = Math.max(28, typeof rowHeightValue === 'number' ? rowHeightValue : 32);
+  const fontSize = Math.max(12, typeof fontSizeValue === 'number' ? fontSizeValue : 12);
+  const headerHeight = Math.max(36, typeof headerHeightValue === 'number' ? headerHeightValue : 36);
+  const sizeMode = readRendererSizeMode(decl.properties.size_mode, values, traces, 'dynamic');
   const widths = table.columns.map((column, index) => {
     const contentWidths = table.rows.map((row) => estimateWidth(row[index] ?? '', fontSize));
     return Math.max(estimateWidth(column, fontSize, true), ...contentWidths, 96);
   });
   const tableWidth = widths.reduce((sum, value) => sum + value, 0);
-  const headerHeight = 36;
-  const width = Math.max(420, tableWidth + padding * 2);
-  const height = padding * 2 + headerHeight + table.rows.length * rowHeight + 24;
+  const computedWidth = Math.max(defaults.minWidth, tableWidth + padding * 2);
+  const computedHeight = padding * 2 + headerHeight + table.rows.length * rowHeight + 24;
+  const requestedWidth = Number(resolveValue(decl.properties.width, values, traces) ?? defaults.width);
+  const requestedHeight = Number(resolveValue(decl.properties.height, values, traces) ?? defaults.height);
+  const width = resolveRendererExtent(
+    explicitWidth,
+    requestedWidth,
+    defaults.width,
+    sizeMode,
+    computedWidth,
+    defaults.minWidth,
+  );
+  const height = resolveRendererExtent(
+    explicitHeight,
+    requestedHeight,
+    defaults.height,
+    sizeMode,
+    computedHeight,
+    defaults.minHeight,
+  );
+
+  return { table, width, height, padding, rowHeight, headerHeight, fontSize, widths };
+}
+
+export function renderTable(plan: TableLayoutPlan): string {
+  const { table, width, height, padding, rowHeight, headerHeight, widths } = plan;
+  const tableWidth = widths.reduce((sum, value) => sum + value, 0);
 
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`;
   svg += `<rect width="${width}" height="${height}" fill="#ffffff"/>`;

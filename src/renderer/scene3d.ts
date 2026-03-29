@@ -1,17 +1,61 @@
 import { Scene3dDeclaration } from '../ast/types';
 import { GSValue, Trace } from '../runtime/values';
 import { readNumber, readString, resolveValue, round, svgDocument, escapeXml } from './common';
+import {
+  hasExplicitProperty,
+  readRendererSizeMode,
+  readSpacingDefaults,
+  resolveRendererExtent,
+} from './readability-policy';
 
 interface ProjectedPoint { x: number; y: number; depth: number }
 
-export function renderScene3d(decl: Scene3dDeclaration, values: Record<string, GSValue>, traces: Map<string, Trace>): string {
-  const width = readNumber(resolveValue(decl.properties.width, values, traces), 960);
-  const height = readNumber(resolveValue(decl.properties.height, values, traces), 620);
+export interface Scene3dLayoutPlan {
+  width: number;
+  height: number;
+  title: string;
+  axisScale: number;
+  originX: number;
+  originY: number;
+}
+
+export function planScene3dLayout(
+  decl: Scene3dDeclaration,
+  values: Record<string, GSValue>,
+  traces: Map<string, Trace>,
+): Scene3dLayoutPlan {
+  const defaults = readSpacingDefaults('scene3d');
+  const explicitWidth = hasExplicitProperty(decl.properties.width);
+  const explicitHeight = hasExplicitProperty(decl.properties.height);
+  const sizeMode = readRendererSizeMode(decl.properties.size_mode, values, traces, 'dynamic');
+  const dynamicWidth = Math.max(defaults.minWidth, defaults.width + Math.min(260, decl.elements.length * 18));
+  const dynamicHeight = Math.max(defaults.minHeight, Math.round(dynamicWidth * 0.64));
+  const width = resolveRendererExtent(
+    explicitWidth,
+    readNumber(resolveValue(decl.properties.width, values, traces), defaults.width),
+    defaults.width,
+    sizeMode,
+    dynamicWidth,
+    defaults.minWidth,
+  );
+  const height = resolveRendererExtent(
+    explicitHeight,
+    readNumber(resolveValue(decl.properties.height, values, traces), defaults.height),
+    defaults.height,
+    sizeMode,
+    dynamicHeight,
+    defaults.minHeight,
+  );
   const title = readString(resolveValue(decl.properties.title, values, traces), decl.name);
   const axisScale = readNumber(resolveValue(decl.properties.scale, values, traces), 130);
   const originX = width / 2;
   const originY = height / 2 + 24;
 
+  return { width, height, title, axisScale, originX, originY };
+}
+
+export function renderScene3d(decl: Scene3dDeclaration, values: Record<string, GSValue>, traces: Map<string, Trace>): string {
+  const { width, height, title, axisScale, originX, originY } = planScene3dLayout(decl, values, traces);
   const project = (x: number, y: number, z: number): ProjectedPoint => {
     const px = (x - y) * 0.92;
     const py = z + (x + y) * 0.46;

@@ -1,5 +1,5 @@
 import { FlowDeclaration } from '../ast/types';
-import { ReadabilityMode } from './readability-policy';
+import { ReadabilityMode, RendererLayoutMode, RendererSizeMode } from './readability-policy';
 
 export type FlowDirection = 'top_down' | 'left_right';
 export type LayoutMode = 'auto' | 'single_row' | 'snake' | 'vertical';
@@ -55,10 +55,15 @@ export interface ResolvedFlowOptions {
   targetHeight: number;
   minFontSize: number;
   preferredFontSize: number;
+  placementMode: RendererLayoutMode;
+  sizeMode: RendererSizeMode;
   layoutMode: LayoutMode;
   fit: FitMode;
   direction: FlowDirection;
   readabilityMode: ReadabilityMode;
+  padding: number;
+  horizontalGap: number;
+  verticalGap: number;
 }
 
 export interface LayoutCandidate {

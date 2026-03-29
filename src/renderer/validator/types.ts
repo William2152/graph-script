@@ -49,7 +49,10 @@ export interface ValidationIssue {
     | 'embed_too_small'
     | 'excessive_empty_space'
     | 'misaligned_siblings'
-    | 'plain_math_text';
+    | 'plain_math_text'
+    | 'manual_coordinates_in_dynamic_mode'
+    | 'hard_constraint_overflow'
+    | 'canvas_overflow_clipping';
   element1: { id: string; type: string };
   element2: { id: string; type: string };
   overlapArea: number;
@@ -116,6 +119,8 @@ export interface ElementParentMap {
 export interface ValidationSnapshot {
   elements: DiagramElement[];
   boxes: BoundingBox[];
+  decl?: any;
+  canvas?: { width: number; height: number };
 }
 
 export interface SemanticRoleEntry {

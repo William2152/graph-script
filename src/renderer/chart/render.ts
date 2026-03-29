@@ -17,7 +17,7 @@ export function renderChart(config: ChartConfig, series: DataSeries[]): string {
 }
 
 function renderXYChart(config: ChartConfig, series: DataSeries[], mode: 'line' | 'scatter' | 'area'): string {
-  const padding = { top: 56, right: 28, bottom: 72, left: 72 };
+  const padding = config.padding;
   const chartWidth = config.width - padding.left - padding.right;
   const chartHeight = config.height - padding.top - padding.bottom;
   const allX = series.flatMap((s) => s.x ?? s.y.map((_, index) => index));
@@ -63,7 +63,7 @@ function renderXYChart(config: ChartConfig, series: DataSeries[], mode: 'line' |
 }
 
 export function renderBarChart(config: ChartConfig, series: DataSeries[]): string {
-  const padding = { top: 56, right: 28, bottom: 84, left: 72 };
+  const padding = config.padding;
   const chartWidth = config.width - padding.left - padding.right;
   const chartHeight = config.height - padding.top - padding.bottom;
   const count = Math.max(...series.map((s) => s.y.length), 1);
@@ -140,7 +140,7 @@ function renderPieChart(config: ChartConfig, series: DataSeries[]): string {
 }
 
 function renderBoxChart(config: ChartConfig, series: DataSeries[]): string {
-  const padding = { top: 56, right: 28, bottom: 72, left: 72 };
+  const padding = config.padding;
   const chartWidth = config.width - padding.left - padding.right;
   const chartHeight = config.height - padding.top - padding.bottom;
   const summaries = series.map((s) => fiveNumberSummary(s.y));

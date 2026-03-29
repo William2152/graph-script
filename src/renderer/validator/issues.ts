@@ -20,6 +20,11 @@ import {
 } from './issues-readability';
 import { detectMathFallbackIssues } from './issues-math-fallback';
 import { detectPlainMathTextIssues } from './issues-plain-math';
+import {
+  detectCanvasOverflowClippingIssues,
+  detectHardConstraintOverflowIssues,
+  detectManualCoordinateModeIssues,
+} from './issues-mode';
 
 export {
   detectOverflowIssues,
@@ -33,6 +38,9 @@ export {
   detectMisalignedSiblingIssues,
   detectMathFallbackIssues,
   detectPlainMathTextIssues,
+  detectCanvasOverflowClippingIssues,
+  detectManualCoordinateModeIssues,
+  detectHardConstraintOverflowIssues,
 };
 
 /**
@@ -45,7 +53,8 @@ export function collectValidationIssues(
   traces: Map<string, Trace>,
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  issues.push(...collectCoreValidationIssues(snapshot, values, traces));
+  const coreIssues = collectCoreValidationIssues(snapshot, values, traces);
+  issues.push(...coreIssues);
   issues.push(...detectConnectorCrossPanelIssues(snapshot.elements, snapshot.boxes, values, traces));
   issues.push(...detectConnectorCrowdingIssues(snapshot.elements, values, traces));
   issues.push(...detectEmbedScaleIssues(snapshot.elements, values, traces));
@@ -54,5 +63,8 @@ export function collectValidationIssues(
   issues.push(...detectMathFallbackIssues(snapshot.elements, values, traces));
   issues.push(...detectPlainMathTextIssues(snapshot.elements, values, traces));
   issues.push(...detectSemanticReadabilityIssues(snapshot, values, traces));
+  issues.push(...detectCanvasOverflowClippingIssues(snapshot));
+  issues.push(...detectManualCoordinateModeIssues(snapshot, values, traces));
+  issues.push(...detectHardConstraintOverflowIssues(snapshot, issues, values, traces));
   return dedupeIssues(issues);
 }

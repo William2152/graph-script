@@ -3,6 +3,7 @@ export interface ChartConfig {
   type: 'bar' | 'line' | 'scatter' | 'pie' | 'box' | 'area';
   width: number;
   height: number;
+  padding: { top: number; right: number; bottom: number; left: number };
   xLabel?: string;
   yLabel?: string;
   labels?: string[];

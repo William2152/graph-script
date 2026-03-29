@@ -1,12 +1,27 @@
-import { DiagramDeclaration, DiagramElement, FlowDeclaration, PageDeclaration } from '../../ast/types';
+import {
+  ChartDeclaration,
+  DiagramDeclaration,
+  DiagramElement,
+  ErdDeclaration,
+  FlowDeclaration,
+  InfraDeclaration,
+  PageDeclaration,
+  Plot3dDeclaration,
+  Scene3dDeclaration,
+  TableDeclaration,
+} from '../../ast/types';
 import { GSValue, Trace } from '../../runtime/values';
-import { readNumber, readString, resolveValue } from '../common';
-import { compileSemanticDiagram } from '../diagram-semantic';
-import { normalizeDiagramElementsForReadability } from '../diagram/readability';
+import { readNumber, resolveValue } from '../common';
+import { buildChartSeries, extractChartConfig } from '../chart';
+import { prepareDiagramLayout } from '../diagram';
+import { planErdLayout } from '../erd';
 import { layoutFlow, LayoutNode } from '../flow';
-import { DEFAULT_FONT_FAMILY } from '../latex';
+import { planInfraLayout } from '../infra';
+import { buildPlot3d } from '../plot3d';
 import { estimateDeclarationCanvasSize, findRenderableTargetDeclaration, planPageLayout } from '../page-layout';
 import { readReadabilityMode, READABILITY_POLICY } from '../readability-policy';
+import { planScene3dLayout } from '../scene3d';
+import { planTableLayout } from '../table';
 import { BoundingBox, ReadabilityMetrics, ValidationIssue, ValidationSnapshot, MIN_FONT_SIZE, MIN_ELEMENT_SIZE } from './types';
 import { getNumberProperty, getStringProperty } from './helpers';
 import { extractBoundingBoxes } from './detection';
@@ -105,18 +120,12 @@ export async function buildValidationSnapshot(
   traces: Map<string, Trace>,
 ): Promise<ValidationSnapshot> {
   if (decl.type === 'DiagramDeclaration') {
-    const diagram = decl as DiagramDeclaration;
-    const width = readNumber(resolveValue(diagram.properties.width, values, traces), 1280);
-    const height = readNumber(resolveValue(diagram.properties.height, values, traces), 720);
-    const fontFamily = readString(resolveValue(diagram.properties.font_family, values, traces), DEFAULT_FONT_FAMILY);
-    const readabilityMode = readReadabilityMode(diagram.properties.readability_mode, values, traces, 'auto');
-    const compiled = await compileSemanticDiagram(diagram.elements || [], values, traces, width, height, { fontFamily, readabilityMode });
-    const elements = !compiled.hasSemantic
-      ? await normalizeDiagramElementsForReadability(compiled.elements, values, traces, { mode: readabilityMode, fontFamily })
-      : compiled.elements;
+    const prepared = await prepareDiagramLayout(decl as DiagramDeclaration, values, traces);
     return {
-      elements,
-      boxes: extractBoundingBoxes(elements, values, traces),
+      elements: prepared.elements,
+      boxes: extractBoundingBoxes(prepared.elements, values, traces),
+      decl,
+      canvas: { width: prepared.width, height: prepared.height },
     };
   }
 
@@ -131,7 +140,7 @@ export async function buildValidationSnapshot(
       height: node.height,
       allowOverlap: false,
     }));
-    return { elements: [], boxes };
+    return { elements: [], boxes, decl, canvas: { width: layout.width, height: layout.height } };
   }
 
   if (decl.type === 'PageDeclaration') {
@@ -169,11 +178,86 @@ export async function buildValidationSnapshot(
     return {
       elements,
       boxes: extractBoundingBoxes(elements, values, traces),
+      decl,
+      canvas: { width: plan.width, height: plan.height },
     };
   }
 
+  if (decl.type === 'InfraDeclaration') {
+    const plan = planInfraLayout(decl as InfraDeclaration, values, traces);
+    const elements = plan.nodes.map((node) => literalElement('panel', `infra-${node.name}`, {
+      x: node.x,
+      y: node.y,
+      w: node.w,
+      h: node.h,
+      semantic_role: 'infra_node',
+    }));
+    return { elements, boxes: extractBoundingBoxes(elements, values, traces), decl, canvas: { width: plan.width, height: plan.height } };
+  }
+
+  if (decl.type === 'ErdDeclaration') {
+    const plan = planErdLayout(decl as ErdDeclaration, values, traces);
+    const elements = plan.tables.map((table) => literalElement('panel', `erd-${table.name}`, {
+      x: table.x,
+      y: table.y,
+      w: table.w,
+      h: table.h,
+      semantic_role: 'erd_table',
+    }));
+    return { elements, boxes: extractBoundingBoxes(elements, values, traces), decl, canvas: { width: plan.width, height: plan.height } };
+  }
+
+  if (decl.type === 'TableDeclaration') {
+    const plan = planTableLayout(decl as TableDeclaration, values, traces);
+    const elements = [literalElement('panel', `table-${decl.name}`, {
+      x: 0,
+      y: 0,
+      w: plan.width,
+      h: plan.height,
+      semantic_role: 'table',
+    })];
+    return { elements, boxes: extractBoundingBoxes(elements, values, traces), decl, canvas: { width: plan.width, height: plan.height } };
+  }
+
+  if (decl.type === 'ChartDeclaration') {
+    const series = buildChartSeries(decl as ChartDeclaration, values, traces);
+    const config = extractChartConfig(decl as ChartDeclaration, values, traces, series);
+    const elements = [literalElement('panel', `chart-${decl.name}`, {
+      x: 0,
+      y: 0,
+      w: config.width,
+      h: config.height,
+      semantic_role: 'chart',
+    })];
+    return { elements, boxes: extractBoundingBoxes(elements, values, traces), decl, canvas: { width: config.width, height: config.height } };
+  }
+
+  if (decl.type === 'Plot3dDeclaration') {
+    const { config } = buildPlot3d(decl as Plot3dDeclaration, values, traces);
+    const elements = [literalElement('panel', `plot3d-${decl.name}`, {
+      x: 0,
+      y: 0,
+      w: config.width,
+      h: config.height,
+      semantic_role: 'plot3d',
+    })];
+    return { elements, boxes: extractBoundingBoxes(elements, values, traces), decl, canvas: { width: config.width, height: config.height } };
+  }
+
+  if (decl.type === 'Scene3dDeclaration') {
+    const plan = planScene3dLayout(decl as Scene3dDeclaration, values, traces);
+    const elements = [literalElement('panel', `scene3d-${decl.name}`, {
+      x: 0,
+      y: 0,
+      w: plan.width,
+      h: plan.height,
+      semantic_role: 'scene3d',
+    })];
+    return { elements, boxes: extractBoundingBoxes(elements, values, traces), decl, canvas: { width: plan.width, height: plan.height } };
+  }
+
   const elements = decl.elements || [];
-  return { elements, boxes: extractBoundingBoxes(elements, values, traces) };
+  return { elements, boxes: extractBoundingBoxes(elements, values, traces), decl };
 }
 
 function literalElement(type: string, name: string, props: Record<string, string | number | boolean>, children?: DiagramElement[]): DiagramElement {

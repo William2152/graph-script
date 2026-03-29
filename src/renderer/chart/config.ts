@@ -1,24 +1,69 @@
 import { ChartDeclaration, Expression } from '../../ast/types';
 import { GSValue, Trace } from '../../runtime/values';
 import { ChartConfig, DataSeries } from './types';
+import {
+  hasExplicitProperty,
+  readRendererSizeMode,
+  readSpacingDefaults,
+  resolveRendererExtent,
+} from '../readability-policy';
 
-export function extractChartConfig(decl: ChartDeclaration, values?: Record<string, GSValue>, traces?: Map<string, Trace>): ChartConfig {
+export function extractChartConfig(
+  decl: ChartDeclaration,
+  values?: Record<string, GSValue>,
+  traces?: Map<string, Trace>,
+  series: DataSeries[] = [],
+): ChartConfig {
+  const defaults = readSpacingDefaults('chart');
+  const explicitWidth = hasExplicitProperty(decl.properties.width);
+  const explicitHeight = hasExplicitProperty(decl.properties.height);
+  const sizeMode = values && traces ? readRendererSizeMode(decl.properties.size_mode, values, traces, 'dynamic') : 'dynamic';
+  const labelsPreview = series.flatMap((entry) => entry.labels ?? []).concat(asStringArray(resolveValue(decl.properties.labels, values, traces)));
+  const longestLabel = Math.max(...labelsPreview.map((label) => label.length), 6);
+  const estimatedLegendWidth = series.length > 1 ? Math.max(160, Math.max(...series.map((entry) => entry.name.length), 10) * 7 + 34) : 0;
+  const dynamicWidth = Math.max(
+    defaults.minWidth,
+    defaults.spacing.margin * 2 + Math.max(320, Math.max(longestLabel * 14, series.reduce((max, entry) => Math.max(max, entry.y.length * 48), 0))) + estimatedLegendWidth,
+  );
+  const dynamicHeight = Math.max(
+    defaults.minHeight,
+    defaults.spacing.margin * 2 + 220 + Math.min(180, longestLabel * 4),
+  );
   const config: ChartConfig = {
     title: decl.name,
     type: 'line',
-    width: 900,
-    height: 480,
+    width: resolveRendererExtent(
+      explicitWidth,
+      typeof resolveValue(decl.properties.width, values, traces) === 'number' ? resolveValue(decl.properties.width, values, traces) : defaults.width,
+      defaults.width,
+      sizeMode,
+      dynamicWidth,
+      defaults.minWidth,
+    ),
+    height: resolveRendererExtent(
+      explicitHeight,
+      typeof resolveValue(decl.properties.height, values, traces) === 'number' ? resolveValue(decl.properties.height, values, traces) : defaults.height,
+      defaults.height,
+      sizeMode,
+      dynamicHeight,
+      defaults.minHeight,
+    ),
+    padding: {
+      top: 56,
+      right: estimatedLegendWidth > 0 ? Math.max(28, estimatedLegendWidth + 20) : 28,
+      bottom: longestLabel > 12 ? 92 : 72,
+      left: 72,
+    },
   };
 
   const typeValue = resolveValue(decl.properties.type, values, traces);
   if (typeof typeValue === 'string' && ['bar', 'line', 'scatter', 'pie', 'box', 'area'].includes(typeValue)) {
     config.type = typeValue as ChartConfig['type'];
   }
-
-  const widthValue = resolveValue(decl.properties.width, values, traces);
-  if (typeof widthValue === 'number') config.width = widthValue;
-  const heightValue = resolveValue(decl.properties.height, values, traces);
-  if (typeof heightValue === 'number') config.height = heightValue;
+  const paddingValue = resolveValue(decl.properties.padding, values, traces);
+  if (typeof paddingValue === 'number') {
+    config.padding = { top: paddingValue, right: paddingValue, bottom: paddingValue, left: paddingValue };
+  }
 
   const xLabelValue = resolveValue(decl.properties.xlabel, values, traces);
   if (typeof xLabelValue === 'string') config.xLabel = xLabelValue;

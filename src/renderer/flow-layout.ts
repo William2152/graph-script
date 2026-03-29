@@ -3,10 +3,11 @@ import {
   DEFAULT_TARGET_WIDTH,
   FLOW_PADDING,
   LayoutCandidate,
+  LayoutNode,
   ResolvedFlowOptions,
 } from './flow-types';
 import { candidateModes, resolveFlowOptions } from './flow-layout-options';
-import { measureNodes } from './flow-layout-measure';
+import { createNode, measureNodes } from './flow-layout-measure';
 import { placeNodes } from './flow-layout-place';
 import { buildEdges } from './flow-layout-routing';
 import { boundsFromNodes, boundsFromNodesAndEdges } from './flow-layout-bounds';
@@ -26,8 +27,8 @@ export function layoutFlow(flow: FlowDeclaration) {
     return {
       nodes: [],
       edges: [],
-      width: DEFAULT_TARGET_WIDTH,
-      height: 240,
+      width: options.sizeMode === 'fixed' ? options.targetWidth : Math.max(DEFAULT_TARGET_WIDTH, options.targetWidth),
+      height: options.sizeMode === 'fixed' ? options.targetHeight : Math.max(240, options.targetHeight),
       minX: 0,
       minY: 0,
       maxX: 0,
@@ -38,6 +39,9 @@ export function layoutFlow(flow: FlowDeclaration) {
   }
 
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  if (options.placementMode === 'manual') {
+    return buildManualFlowLayout(orderedNodeIds, nodeById, edges, options);
+  }
   const candidates = candidateModes(options, orderedNodeIds.length).map((mode) =>
     buildCandidate(mode, orderedNodeIds, nodeById, edges, options),
   );
@@ -66,7 +70,7 @@ function buildCandidate(
 ): LayoutCandidate {
   let fontSize = options.preferredFontSize;
   let measured = measureNodes(orderedNodeIds, nodeById, fontSize, options.fit);
-  let nodes = placeNodes(mode, orderedNodeIds, measured, options.fit);
+  let nodes = placeNodes(mode, orderedNodeIds, measured, options.fit, options.horizontalGap, options.verticalGap);
   let bounds = boundsFromNodes(nodes);
 
   const fitsPreferred = bounds.maxX - bounds.minX <= options.targetWidth - 120
@@ -78,7 +82,7 @@ function buildCandidate(
     const scaledFont = Math.floor(options.preferredFontSize * Math.min(scaleX, scaleY, 1));
     fontSize = Math.max(options.minFontSize, scaledFont || options.minFontSize);
     measured = measureNodes(orderedNodeIds, nodeById, fontSize, options.fit);
-    nodes = placeNodes(mode, orderedNodeIds, measured, options.fit);
+    nodes = placeNodes(mode, orderedNodeIds, measured, options.fit, options.horizontalGap, options.verticalGap);
     bounds = boundsFromNodes(nodes);
   }
 
@@ -98,12 +102,16 @@ function buildCandidate(
     mode,
     nodes,
     edges: edgesLayout,
-    minX: fullBounds.minX - FLOW_PADDING,
-    minY: fullBounds.minY - FLOW_PADDING,
-    maxX: fullBounds.maxX + FLOW_PADDING,
-    maxY: fullBounds.maxY + FLOW_PADDING,
-    width: contentWidth + FLOW_PADDING * 2,
-    height: contentHeight + FLOW_PADDING * 2,
+    minX: fullBounds.minX - options.padding,
+    minY: fullBounds.minY - options.padding,
+    maxX: fullBounds.maxX + options.padding,
+    maxY: fullBounds.maxY + options.padding,
+    width: options.sizeMode === 'fixed'
+      ? options.targetWidth
+      : Math.max(options.targetWidth, contentWidth + options.padding * 2),
+    height: options.sizeMode === 'fixed'
+      ? options.targetHeight
+      : Math.max(options.targetHeight, contentHeight + options.padding * 2),
     fontSize,
     overflowX,
     overflowY,
@@ -113,4 +121,46 @@ function buildCandidate(
 
 function chooseCandidate(candidates: LayoutCandidate[]): LayoutCandidate {
   return [...candidates].sort((a, b) => a.score - b.score)[0];
+}
+
+function buildManualFlowLayout(
+  orderedNodeIds: string[],
+  nodeById: Map<string, FlowDeclaration['nodes'][number]>,
+  edges: FlowDeclaration['edges'],
+  options: ResolvedFlowOptions,
+) {
+  const measured = measureNodes(orderedNodeIds, nodeById, options.preferredFontSize, options.fit);
+  const nodes: LayoutNode[] = orderedNodeIds.map((id, index) => {
+    const nodeDecl = nodeById.get(id);
+    const measuredNode = createNode(id, measured.get(id));
+    const nodeProps = (nodeDecl as any)?.properties ?? {};
+    const x = typeof nodeProps?.x?.value === 'number'
+      ? nodeProps.x.value
+      : index * (measuredNode.width + options.horizontalGap);
+    const y = typeof nodeProps?.y?.value === 'number'
+      ? nodeProps.y.value
+      : 0;
+    return { ...measuredNode, x, y };
+  });
+  const edgesLayout = buildEdges(edges, nodes);
+  const bounds = boundsFromNodesAndEdges(nodes, edgesLayout);
+  const contentWidth = bounds.maxX - bounds.minX;
+  const contentHeight = bounds.maxY - bounds.minY;
+
+  return {
+    nodes,
+    edges: edgesLayout,
+    width: options.sizeMode === 'fixed'
+      ? options.targetWidth
+      : Math.max(options.targetWidth, contentWidth + options.padding * 2),
+    height: options.sizeMode === 'fixed'
+      ? options.targetHeight
+      : Math.max(options.targetHeight, contentHeight + options.padding * 2),
+    minX: bounds.minX - options.padding,
+    minY: bounds.minY - options.padding,
+    maxX: bounds.maxX + options.padding,
+    maxY: bounds.maxY + options.padding,
+    direction: options.direction,
+    options,
+  };
 }

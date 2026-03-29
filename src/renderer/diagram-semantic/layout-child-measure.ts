@@ -5,6 +5,7 @@ import { compileGraphElement } from '../graph';
 import { measureDisplayFormula, measureRichTextBlock, readLatexMode } from '../latex';
 import {
   BODY_TEXT_MIN,
+  CARD_TITLE_MIN,
   CHILD_GAP_MIN,
   FORMULA_TEXT_MIN,
   MIN_ASSET_HEIGHT,
@@ -52,6 +53,21 @@ export async function measureChild(
   layoutChildren: LayoutChildrenFn,
 ): Promise<ChildLayout> {
   switch (child.type) {
+    case 'panel':
+    case 'box':
+    case 'badge':
+    case 'callout':
+      return measureBoxLikeContainerChild(
+        child,
+        maxWidth,
+        values,
+        traces,
+        fontFamily,
+        imageScale,
+        fillImages,
+        fontScale,
+        layoutChildren,
+      );
     case 'text': {
       const baseFontSize = Math.max(BODY_TEXT_MIN, getNumber(child, values, traces, 'size', BODY_TEXT_MIN));
       const size = baseFontSize * fontScale;
@@ -70,7 +86,10 @@ export async function measureChild(
         maxLines: Math.max(2, getNumber(child, values, traces, 'max_lines', 6)),
         fontFamily,
       });
-      const width = Math.min(maxWidth, Math.max(24, metrics.width));
+      const explicitWidth = getNumber(child, values, traces, 'w', 0);
+      const width = explicitWidth > 0
+        ? Math.min(maxWidth, explicitWidth)
+        : Math.min(maxWidth, Math.max(24, metrics.width));
       const height = Math.max(size, metrics.height);
       return {
         width,
@@ -89,6 +108,7 @@ export async function measureChild(
             normalized_value: metrics.normalizedValue,
             min_gap: CHILD_GAP_MIN,
             semantic_role: getString(child, values, traces, 'semantic_role', 'body_text'),
+            ...dynamicPlacementProps(child),
           }),
         ],
       };
@@ -98,7 +118,10 @@ export async function measureChild(
       const size = baseFontSize * fontScale;
       const value = getString(child, values, traces, 'value', child.name);
       const metrics = await measureDisplayFormula(value, { fontSize: size });
-      const constrainedWidth = Math.min(Math.max(metrics.width, 48), maxWidth);
+      const explicitWidth = getNumber(child, values, traces, 'w', 0);
+      const constrainedWidth = explicitWidth > 0
+        ? Math.min(maxWidth, explicitWidth)
+        : Math.min(Math.max(metrics.width, 48), maxWidth);
       return {
         width: constrainedWidth,
         height: metrics.height,
@@ -114,6 +137,7 @@ export async function measureChild(
             normalized_value: metrics.normalizedValue,
             min_gap: CHILD_GAP_MIN,
             semantic_role: getString(child, values, traces, 'semantic_role', 'display_formula'),
+            ...dynamicPlacementProps(child),
           }),
         ],
       };
@@ -145,6 +169,7 @@ export async function measureChild(
             w: width,
             h: height,
             semantic_role: getString(child, values, traces, 'semantic_role', 'asset'),
+            ...dynamicPlacementProps(child),
           }),
         ],
       };
@@ -155,6 +180,10 @@ export async function measureChild(
         defaultWidth: maxWidth,
         maxWidth,
       });
+      if (hasExplicitCoordinates(child)) {
+        compiled.elements = compiled.elements.map((elementToAnnotate) =>
+          cloneElement(elementToAnnotate, { manual_coordinates_ignored: true }));
+      }
       return { width: compiled.width, height: compiled.height, elements: compiled.elements };
     }
     case 'divider': {
@@ -246,6 +275,7 @@ export async function measureChild(
         validation_ignore: !visible,
         min_gap: layout.gap,
         semantic_role: 'group',
+        ...dynamicPlacementProps(child),
       }, offsetChildren(content.elements, padding, padding));
       return { width: groupWidth, height: groupHeight, elements: [box] };
     }
@@ -255,8 +285,128 @@ export async function measureChild(
       return {
         width,
         height,
-        elements: [cloneElement(child, { x: 0, y: 0, w: width, h: height })],
+        elements: [cloneElement(child, { x: 0, y: 0, w: width, h: height, ...dynamicPlacementProps(child) })],
       };
     }
   }
+}
+
+async function measureBoxLikeContainerChild(
+  child: DiagramElement,
+  maxWidth: number,
+  values: Record<string, GSValue>,
+  traces: Map<string, Trace>,
+  fontFamily: string,
+  imageScale: number,
+  fillImages: boolean,
+  fontScale: number,
+  layoutChildren: LayoutChildrenFn,
+): Promise<ChildLayout> {
+  const defaultPadding = child.type === 'badge'
+    ? Math.max(12, getNumber(child, values, traces, 'padding', 14))
+    : Math.max(20, getNumber(child, values, traces, 'padding', 22));
+  const gap = Math.max(CHILD_GAP_MIN, getNumber(child, values, traces, 'gap', CHILD_GAP_MIN));
+  const layout = readContainerOptions(child, values, traces, 'stack', gap);
+  const hasExplicitWidth = child.properties.w != null;
+  const stretchWidth = !hasExplicitWidth && layout.align === 'stretch';
+  const title = getString(child, values, traces, 'label', '');
+  const subtitle = getString(child, values, traces, 'subtitle', '');
+  const titleSize = Math.max(CARD_TITLE_MIN, getNumber(child, values, traces, 'title_size', getNumber(child, values, traces, 'size', CARD_TITLE_MIN)));
+  const subtitleSize = Math.max(BODY_TEXT_MIN, getNumber(child, values, traces, 'subtitle_size', BODY_TEXT_MIN));
+  const latex = readLatexMode(resolveValue(child.properties.latex, values, traces), 'auto');
+
+  let width = stretchWidth
+    ? maxWidth
+    : Math.min(maxWidth, Math.max(140, getNumber(child, values, traces, 'w', maxWidth)));
+  let headerHeight = 0;
+
+  const measureHeaderHeight = async (candidateWidth: number): Promise<number> => {
+    const titleMetrics = title
+      ? await measureRichTextBlock(title, {
+          x: candidateWidth / 2,
+          y: 0,
+          maxWidth: Math.max(120, candidateWidth - defaultPadding * 2),
+          fontSize: titleSize * fontScale,
+          weight: '800',
+          anchor: 'middle',
+          latex,
+          maxLines: child.type === 'badge' ? 5 : 3,
+          fontFamily,
+        })
+      : { height: 0 };
+    const subtitleMetrics = subtitle
+      ? await measureRichTextBlock(subtitle, {
+          x: candidateWidth / 2,
+          y: 0,
+          maxWidth: Math.max(120, candidateWidth - defaultPadding * 2),
+          fontSize: subtitleSize * fontScale,
+          weight: '500',
+          anchor: 'middle',
+          latex,
+          maxLines: child.type === 'badge' ? 2 : 4,
+          fontFamily,
+        })
+      : { height: 0 };
+    if (!title && !subtitle) return defaultPadding;
+    return Math.max(
+      child.type === 'badge' ? 52 : 68,
+      Math.ceil(defaultPadding + titleMetrics.height + (subtitle ? subtitleMetrics.height + 10 : 0)),
+    );
+  };
+
+  headerHeight = await measureHeaderHeight(width);
+  let innerWidth = Math.max(80, width - defaultPadding * 2);
+  let content = await layoutChildren(child.children ?? [], innerWidth, layout, values, traces, fontFamily, imageScale, fillImages, fontScale);
+
+  if (!hasExplicitWidth && !stretchWidth) {
+    width = clamp(Math.ceil(Math.max(content.width + defaultPadding * 2, 160)), 160, maxWidth);
+    headerHeight = await measureHeaderHeight(width);
+    innerWidth = Math.max(80, width - defaultPadding * 2);
+    content = await layoutChildren(child.children ?? [], innerWidth, layout, values, traces, fontFamily, imageScale, fillImages, fontScale);
+  }
+
+  const contentTop = title || subtitle ? headerHeight + 10 : defaultPadding;
+  const explicitHeight = getNumber(child, values, traces, 'h', 0);
+  const minHeight = getNumber(child, values, traces, 'min_h', 0);
+  const height = Math.max(
+    minHeight,
+    explicitHeight,
+    Math.ceil(contentTop + content.height + defaultPadding),
+  );
+  const container = cloneElement(child, {
+    x: 0,
+    y: 0,
+    w: width,
+    h: height,
+    size: titleSize,
+    title_size: titleSize,
+    subtitle_size: subtitleSize,
+    padding: defaultPadding,
+    gap: layout.gap,
+    min_gap: layout.gap,
+    semantic_role: getString(child, values, traces, 'semantic_role', 'group'),
+    ...dynamicPlacementProps(child),
+  });
+
+  return {
+    width,
+    height,
+    elements: [{
+      ...container,
+      children: offsetChildren(content.elements, defaultPadding, contentTop),
+    }],
+  };
+}
+
+function dynamicPlacementProps(child: DiagramElement): Record<string, string | number | boolean> {
+  const props: Record<string, string | number | boolean> = {};
+  if (hasExplicitCoordinates(child)) props.manual_coordinates_ignored = true;
+  if (child.properties.w != null || child.properties.h != null || child.properties.padding != null || child.properties.gap != null) {
+    props.hard_constraint = true;
+  }
+  return props;
+}
+
+function hasExplicitCoordinates(child: DiagramElement): boolean {
+  return child.properties.x != null || child.properties.y != null || child.properties.x2 != null || child.properties.y2 != null;
 }

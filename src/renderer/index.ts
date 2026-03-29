@@ -23,7 +23,7 @@ import { renderPage } from './page';
 import { buildPlot3d, renderPlot3d } from './plot3d';
 import { renderPseudoBlock } from './pseudo';
 import { renderScene3d } from './scene3d';
-import { buildTableData, renderTable } from './table';
+import { planTableLayout, renderTable } from './table';
 import { isValidatableDeclaration, validateAndAdjust, writeValidationReport, ValidationReport } from './validator';
 
 export interface RenderOptions {
@@ -88,14 +88,14 @@ export class Renderer {
     if (!decl || typeof decl !== 'object') return null;
     switch (decl.type) {
       case 'ChartDeclaration': {
-        const config = extractChartConfig(decl as ChartDeclaration, values, traces);
         const series = buildChartSeries(decl as ChartDeclaration, values, traces);
+        const config = extractChartConfig(decl as ChartDeclaration, values, traces, series);
         return series.length ? renderChart(config, series) : null;
       }
       case 'FlowDeclaration':
         return renderFlow(layoutFlow(decl as FlowDeclaration), (decl as FlowDeclaration).name || name);
       case 'TableDeclaration':
-        return renderTable(buildTableData(decl as TableDeclaration, values, traces));
+        return renderTable(planTableLayout(decl as TableDeclaration, values, traces));
       case 'Plot3dDeclaration': {
         const { config, series } = buildPlot3d(decl as Plot3dDeclaration, values, traces);
         return series ? renderPlot3d(config, series) : null;
@@ -114,7 +114,7 @@ export class Renderer {
       case 'Scene3dDeclaration':
         return renderScene3d(decl as Scene3dDeclaration, values, traces);
       case 'ErdDeclaration':
-        return renderErd(decl as ErdDeclaration);
+        return renderErd(decl as ErdDeclaration, values, traces);
       case 'InfraDeclaration':
         return renderInfra(decl as InfraDeclaration, values, traces);
       case 'PageDeclaration':
